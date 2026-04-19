@@ -3,850 +3,1037 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
-  <title>Magic Window — Kitap AR</title>
+  <title>AR Kütüphane</title>
 
-  <!-- Tailwind CSS -->
-  <script src="https://cdn.tailwindcss.com"></script>
-
-  <!-- Three.js -->
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r134/three.min.js"></script>
-
-  <!-- MediaPipe Hands -->
-  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/control_utils/control_utils.js" crossorigin="anonymous"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
+  <!-- OCR -->
+  <script src="https://cdn.jsdelivr.net/npm/tesseract.js@4/dist/tesseract.min.js"></script>
+  <!-- Fuzzy search -->
+  <script src="https://cdn.jsdelivr.net/npm/fuse.js@7/dist/fuse.min.js"></script>
+  <!-- Hand tracking -->
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
 
   <style>
-    /* ── Reset & base ────────────────────────────────────── */
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
     html, body {
       width: 100%; height: 100%;
       overflow: hidden;
       background: #000;
-      font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', sans-serif;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
       -webkit-font-smoothing: antialiased;
     }
 
-    /* ── Camera video ────────────────────────────────────── */
-    #cameraVideo {
-      position: fixed;
-      top: 0; left: 0;
+    /* ── Camera feed ─────────────────────────────────────────── */
+    #cam {
+      position: fixed; inset: 0;
       width: 100%; height: 100%;
       object-fit: cover;
-      /* NO mirror — back camera */
+      z-index: 1;
+      transform: none !important; /* No mirroring for back camera */
     }
 
-    /* ── Three.js canvas overlay ─────────────────────────── */
-    #threeCanvas {
-      position: fixed;
-      top: 0; left: 0;
+    /* ── Aura + connection line overlay ──────────────────────── */
+    #overlay {
+      position: fixed; inset: 0;
       width: 100%; height: 100%;
       pointer-events: none;
+      z-index: 2;
+    }
+
+    /* ── Stats pill — top right ──────────────────────────────── */
+    #stats-pill {
+      position: fixed;
+      top: 20px; right: 16px;
       z-index: 10;
-    }
-
-    /* ── Hand cursor ─────────────────────────────────────── */
-    #handCursor {
-      position: fixed;
-      width: 24px; height: 24px;
-      border: 2.5px solid rgba(255,255,255,0.95);
-      border-radius: 50%;
-      transform: translate(-50%, -50%);
-      pointer-events: none;
-      z-index: 100;
-      transition: border-color 0.12s ease, box-shadow 0.12s ease, transform 0.06s ease;
-      box-shadow: 0 0 8px rgba(255,255,255,0.4);
-      display: none;
-    }
-    #handCursor.pinch {
-      border-color: #60a5fa;
-      box-shadow: 0 0 16px rgba(96,165,250,0.8), 0 0 4px rgba(96,165,250,1);
-      transform: translate(-50%, -50%) scale(0.8);
-    }
-
-    /* ── Status bar ──────────────────────────────────────── */
-    #statusBar {
-      position: fixed;
-      bottom: 28px;
-      left: 50%;
-      transform: translateX(-50%);
-      z-index: 90;
-      padding: 10px 22px;
+      padding: 8px 16px;
       border-radius: 999px;
-      background: rgba(0,0,0,0.55);
+      background: rgba(0,0,0,0.52);
       backdrop-filter: blur(20px) saturate(180%);
       -webkit-backdrop-filter: blur(20px) saturate(180%);
       border: 1px solid rgba(255,255,255,0.14);
-      color: #fff;
-      font-size: 13.5px;
-      font-weight: 500;
-      letter-spacing: 0.01em;
-      white-space: nowrap;
-      box-shadow: 0 4px 24px rgba(0,0,0,0.4);
-      transition: opacity 0.3s ease;
-    }
-
-    /* ── Demo badge ──────────────────────────────────────── */
-    #demoBadge {
-      position: fixed;
-      top: 16px; left: 16px;
-      z-index: 90;
-      padding: 5px 12px;
-      border-radius: 999px;
-      background: rgba(0,0,0,0.5);
-      backdrop-filter: blur(12px);
-      -webkit-backdrop-filter: blur(12px);
-      border: 1px solid rgba(255,255,255,0.12);
-      color: rgba(255,255,255,0.7);
-      font-size: 11px;
+      color: rgba(255,255,255,0.82);
+      font-size: 12px;
       font-weight: 600;
-      letter-spacing: 0.04em;
-    }
-
-    /* ── Simulate button ─────────────────────────────────── */
-    #simBtn {
-      position: fixed;
-      top: 50%;
-      left: 50%;
-      transform: translate(-50%, -50%);
-      z-index: 95;
-      padding: 14px 28px;
-      background: rgba(99,102,241,0.75);
-      backdrop-filter: blur(16px);
-      -webkit-backdrop-filter: blur(16px);
-      border: 1.5px solid rgba(255,255,255,0.25);
-      border-radius: 14px;
-      color: #fff;
-      font-size: 15px;
-      font-weight: 700;
       letter-spacing: 0.02em;
-      cursor: pointer;
-      transition: opacity 0.25s ease, transform 0.15s ease, background 0.15s ease;
-      box-shadow: 0 8px 32px rgba(99,102,241,0.45);
+      white-space: nowrap;
     }
-    #simBtn:hover { background: rgba(99,102,241,0.9); transform: translate(-50%, -50%) scale(1.04); }
-    #simBtn:active { transform: translate(-50%, -50%) scale(0.97); }
 
-    /* ── 3D "KÜNYEYI AÇ" floating button (HTML overlay) ──── */
-    #openCardBtn {
+    /* ── Legend pill — top left ──────────────────────────────── */
+    #legend {
       position: fixed;
-      z-index: 80;
-      padding: 12px 26px;
-      background: rgba(255,255,255,0.12);
+      top: 20px; left: 16px;
+      z-index: 10;
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+    }
+    .legend-item {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 11px;
+      color: rgba(255,255,255,0.65);
+      font-weight: 500;
+    }
+    .legend-dot {
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+
+    /* ── Title pill — floats near spine ──────────────────────── */
+    #title-pill {
+      position: fixed;
+      z-index: 12;
+      padding: 7px 15px;
+      border-radius: 999px;
+      background: rgba(5, 5, 15, 0.78);
       backdrop-filter: blur(20px) saturate(180%);
       -webkit-backdrop-filter: blur(20px) saturate(180%);
-      border: 1.5px solid rgba(255,255,255,0.35);
-      border-radius: 14px;
+      border: 1px solid rgba(255,255,255,0.18);
       color: #fff;
-      font-size: 14px;
-      font-weight: 700;
-      letter-spacing: 0.08em;
-      cursor: pointer;
-      transform: translate(-50%, -50%);
-      transition: opacity 0.4s cubic-bezier(.4,0,.2,1),
-                  transform 0.4s cubic-bezier(.4,0,.2,1),
-                  box-shadow 0.2s ease,
-                  background 0.2s ease;
-      box-shadow: 0 8px 32px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.15);
-      opacity: 0;
+      font-size: 13px;
+      font-weight: 600;
+      white-space: nowrap;
       pointer-events: none;
+      transform: translate(-50%, calc(-100% - 12px));
+      opacity: 0;
+      transition: opacity 0.22s ease;
+      max-width: 85vw;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.4);
     }
-    #openCardBtn.visible {
-      opacity: 1;
-      pointer-events: auto;
-    }
-    #openCardBtn.hovered {
-      background: rgba(255,255,255,0.22);
-      box-shadow: 0 0 28px rgba(255,255,255,0.25), 0 8px 32px rgba(0,0,0,0.3);
-    }
+    #title-pill.visible { opacity: 1; }
 
-    /* ── Spatial Info Card ───────────────────────────────── */
-    #infoCard {
+    /* ── Info card — glassmorphism ───────────────────────────── */
+    #info-card {
       position: fixed;
-      z-index: 85;
-      width: 320px;
+      z-index: 20;
+      width: min(340px, calc(100vw - 32px));
       top: 50%;
       left: 50%;
-      transform: translate(-50%, -50%) scale(0.85);
+      transform: translate(-50%, -50%) scale(0.88);
       opacity: 0;
       pointer-events: none;
-      transition: opacity 0.45s cubic-bezier(.4,0,.2,1),
-                  transform 0.45s cubic-bezier(.4,0,.2,1);
-
-      background: rgba(10,10,20,0.72);
-      backdrop-filter: blur(32px) saturate(200%) brightness(1.1);
-      -webkit-backdrop-filter: blur(32px) saturate(200%) brightness(1.1);
+      transition: opacity 0.4s cubic-bezier(.4,0,.2,1),
+                  transform 0.4s cubic-bezier(.4,0,.2,1);
+      background: rgba(8, 8, 20, 0.76);
+      backdrop-filter: blur(44px) saturate(220%);
+      -webkit-backdrop-filter: blur(44px) saturate(220%);
       border: 1px solid rgba(255,255,255,0.18);
-      border-radius: 22px;
-      box-shadow: 0 24px 64px rgba(0,0,0,0.6),
-                  inset 0 1px 0 rgba(255,255,255,0.12);
+      border-radius: 24px;
+      box-shadow: 0 28px 80px rgba(0,0,0,0.65),
+                  inset 0 1px 0 rgba(255,255,255,0.1);
       overflow: hidden;
     }
-    #infoCard.visible {
+    #info-card.visible {
       opacity: 1;
       pointer-events: auto;
       transform: translate(-50%, -50%) scale(1);
     }
 
-    /* Card header strip */
-    .card-header {
-      padding: 20px 20px 14px;
-      border-bottom: 1px solid rgba(255,255,255,0.08);
-      background: linear-gradient(135deg, rgba(99,102,241,0.18) 0%, rgba(168,85,247,0.12) 100%);
+    .card-top {
+      padding: 22px 22px 16px;
+      background: linear-gradient(135deg, rgba(99,102,241,0.22), rgba(168,85,247,0.15));
+      border-bottom: 1px solid rgba(255,255,255,0.07);
     }
-    .card-header .genre-badge {
+    .card-genre {
       display: inline-block;
-      padding: 3px 10px;
+      padding: 3px 10px; margin-bottom: 10px;
       border-radius: 999px;
-      background: rgba(99,102,241,0.35);
+      background: rgba(99,102,241,0.32);
       border: 1px solid rgba(99,102,241,0.5);
       color: #a5b4fc;
-      font-size: 10.5px;
-      font-weight: 700;
-      letter-spacing: 0.06em;
-      text-transform: uppercase;
-      margin-bottom: 8px;
+      font-size: 10px; font-weight: 700;
+      letter-spacing: 0.07em; text-transform: uppercase;
     }
-    .card-header h2 {
-      color: #fff;
-      font-size: 17px;
-      font-weight: 700;
-      line-height: 1.3;
-      margin-bottom: 4px;
+    .card-title {
+      color: #fff; font-size: 18px;
+      font-weight: 700; line-height: 1.3; margin-bottom: 5px;
     }
-    .card-header .author {
-      color: rgba(255,255,255,0.55);
-      font-size: 13px;
-      font-weight: 500;
-    }
+    .card-author { color: rgba(255,255,255,0.52); font-size: 13px; font-weight: 500; }
 
-    /* Card body */
-    .card-body {
-      padding: 16px 20px 20px;
-    }
+    .card-body { padding: 16px 22px 20px; }
 
-    /* Read date — prominent */
-    .read-date-block {
-      display: flex;
-      align-items: center;
-      gap: 12px;
-      padding: 12px 14px;
-      border-radius: 12px;
-      background: rgba(255,255,255,0.06);
-      border: 1px solid rgba(255,255,255,0.09);
-      margin-bottom: 14px;
+    .status-block {
+      display: flex; align-items: center; gap: 12px;
+      padding: 12px 14px; margin-bottom: 14px;
+      border-radius: 13px;
+      background: rgba(255,255,255,0.05);
+      border: 1px solid rgba(255,255,255,0.08);
     }
-    .read-date-block .icon {
-      font-size: 22px;
-      line-height: 1;
-    }
-    .read-date-block .label {
-      font-size: 10px;
-      color: rgba(255,255,255,0.4);
-      font-weight: 600;
-      letter-spacing: 0.06em;
-      text-transform: uppercase;
-      margin-bottom: 2px;
-    }
-    .read-date-block .date-value {
-      font-size: 20px;
-      font-weight: 700;
-      color: #fff;
-      letter-spacing: 0.03em;
-    }
+    .status-icon { font-size: 22px; line-height: 1; }
+    .status-lbl  { font-size: 10px; color: rgba(255,255,255,0.38); font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; margin-bottom: 2px; }
+    .status-val  { font-size: 16px; font-weight: 700; color: #fff; }
 
-    /* Meta rows */
     .meta-row {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
+      display: flex; justify-content: space-between; align-items: center;
       padding: 8px 0;
       border-bottom: 1px solid rgba(255,255,255,0.05);
     }
-    .meta-row:last-child { border-bottom: none; }
-    .meta-row .meta-label {
-      font-size: 11.5px;
-      color: rgba(255,255,255,0.4);
-      font-weight: 600;
-      letter-spacing: 0.04em;
-      text-transform: uppercase;
-    }
-    .meta-row .meta-value {
-      font-size: 13px;
-      color: rgba(255,255,255,0.85);
-      font-weight: 500;
-      text-align: right;
+    .meta-row:last-of-type { border-bottom: none; }
+    .meta-lbl { font-size: 11px; color: rgba(255,255,255,0.36); font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; }
+    .meta-val { font-size: 13px; color: rgba(255,255,255,0.82); font-weight: 500; text-align: right; }
+
+    .readers-row { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 4px; }
+    .reader-chip {
+      padding: 2px 9px; border-radius: 999px;
+      background: rgba(134,239,172,0.15);
+      border: 1px solid rgba(134,239,172,0.3);
+      color: #86efac; font-size: 11px; font-weight: 600;
     }
 
-    /* Close button */
     .close-btn {
-      width: 100%;
-      margin-top: 16px;
-      padding: 11px;
-      border-radius: 12px;
-      background: rgba(255,59,48,0.2);
-      border: 1px solid rgba(255,59,48,0.35);
-      color: rgba(255,180,175,0.95);
-      font-size: 13px;
-      font-weight: 700;
-      letter-spacing: 0.04em;
+      width: 100%; margin-top: 16px; padding: 11px;
+      border-radius: 13px;
+      background: rgba(255,59,48,0.16);
+      border: 1px solid rgba(255,59,48,0.32);
+      color: rgba(255,175,170,0.9);
+      font-size: 13px; font-weight: 700; letter-spacing: 0.05em;
       cursor: pointer;
-      transition: background 0.15s ease, transform 0.1s ease;
+      transition: background 0.15s ease, box-shadow 0.15s ease;
     }
-    .close-btn:hover { background: rgba(255,59,48,0.32); }
-    .close-btn:active { transform: scale(0.97); }
+    .close-btn:hover, .close-btn.dwell-active {
+      background: rgba(255,59,48,0.32);
+      box-shadow: 0 0 22px rgba(255,59,48,0.38);
+    }
 
-    /* ── Connection line canvas ──────────────────────────── */
-    #connectionCanvas {
+    /* ── Hand cursor ─────────────────────────────────────────── */
+    #hand-cursor {
       position: fixed;
-      top: 0; left: 0;
-      width: 100%; height: 100%;
+      width: 38px; height: 38px;
       pointer-events: none;
-      z-index: 82;
+      z-index: 30;
+      transform: translate(-50%, -50%);
+      display: none;
     }
 
-    /* ── Error / permission overlay ──────────────────────── */
-    #errorOverlay {
+    /* ── Status bar ──────────────────────────────────────────── */
+    #status-bar {
       position: fixed;
-      inset: 0;
-      z-index: 200;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      background: rgba(0,0,0,0.85);
-      backdrop-filter: blur(8px);
-      -webkit-backdrop-filter: blur(8px);
-      padding: 32px;
+      bottom: 28px; left: 50%;
+      transform: translateX(-50%);
+      z-index: 12;
+      padding: 10px 22px;
+      border-radius: 999px;
+      background: rgba(0,0,0,0.55);
+      backdrop-filter: blur(20px) saturate(180%);
+      -webkit-backdrop-filter: blur(20px) saturate(180%);
+      border: 1px solid rgba(255,255,255,0.11);
+      color: rgba(255,255,255,0.82);
+      font-size: 13px; font-weight: 500; letter-spacing: 0.01em;
+      white-space: nowrap; text-align: center;
+      max-width: calc(100vw - 32px);
+      transition: color 0.3s ease;
     }
-    #errorOverlay .error-box {
-      max-width: 380px;
-      padding: 32px;
-      border-radius: 20px;
-      background: rgba(30,10,10,0.9);
-      border: 1px solid rgba(255,80,80,0.3);
+
+    /* ── Loading overlay ─────────────────────────────────────── */
+    #loading {
+      position: fixed; inset: 0; z-index: 100;
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center; gap: 18px;
+      background: rgba(0,0,0,0.96);
+    }
+    .ld-logo  { font-size: 52px; margin-bottom: 2px; }
+    .ld-title { color: #fff; font-size: 20px; font-weight: 700; }
+    .ld-step  { color: rgba(255,255,255,0.46); font-size: 12.5px; max-width: 280px; text-align: center; line-height: 1.5; }
+    .ld-bar   { width: 210px; height: 3px; background: rgba(255,255,255,0.1); border-radius: 999px; overflow: hidden; }
+    .ld-fill  { height: 100%; border-radius: 999px; background: linear-gradient(90deg, #6366f1, #a855f7); transition: width 0.5s ease; width: 0%; }
+
+    /* ── Error overlay ───────────────────────────────────────── */
+    #error {
+      position: fixed; inset: 0; z-index: 100;
+      display: none; align-items: center; justify-content: center;
+      background: rgba(0,0,0,0.9); backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px); padding: 24px;
+    }
+    .err-box {
+      max-width: 380px; padding: 28px;
+      border-radius: 22px;
+      background: rgba(22,8,8,0.96);
+      border: 1px solid rgba(255,80,80,0.28);
       color: #fff;
-      text-align: center;
     }
-    #errorOverlay h3 { font-size: 20px; font-weight: 700; margin-bottom: 12px; color: #fca5a5; }
-    #errorOverlay p  { font-size: 14px; line-height: 1.6; color: rgba(255,255,255,0.7); }
+    .err-box h3 { font-size: 17px; font-weight: 700; color: #fca5a5; margin-bottom: 10px; }
+    .err-box p  { font-size: 13px; line-height: 1.7; color: rgba(255,255,255,0.62); margin-bottom: 6px; }
+    .err-code   { margin-top: 10px; padding: 8px 12px; border-radius: 8px; background: rgba(255,255,255,0.05); font-family: monospace; font-size: 11px; color: #fca5a5; word-break: break-all; }
 
-    /* ── Loading spinner ─────────────────────────────────── */
-    #loadingOverlay {
-      position: fixed;
-      inset: 0;
-      z-index: 200;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      gap: 16px;
-      background: rgba(0,0,0,0.9);
-    }
-    .spinner {
-      width: 40px; height: 40px;
-      border: 3px solid rgba(255,255,255,0.15);
-      border-top-color: rgba(255,255,255,0.85);
-      border-radius: 50%;
-      animation: spin 0.75s linear infinite;
-    }
-    @keyframes spin { to { transform: rotate(360deg); } }
-    #loadingOverlay p { color: rgba(255,255,255,0.6); font-size: 13px; }
+    /* ── Dwell flash animation ───────────────────────────────── */
+    @keyframes dwellFlash { 0%,100% { opacity: 1; } 50% { opacity: 0.45; } }
+    .dwell-flash { animation: dwellFlash 0.22s ease; }
 
-    /* ── Responsive landscape tweaks ────────────────────── */
+    /* ── Landscape ───────────────────────────────────────────── */
     @media (orientation: landscape) {
-      #infoCard { left: 65%; }
-      #openCardBtn { left: 50%; }
+      #info-card { left: 70%; }
     }
   </style>
 </head>
 <body>
 
-  <!-- Loading overlay -->
-  <div id="loadingOverlay">
-    <div class="spinner"></div>
-    <p>Kamera başlatılıyor…</p>
+<!-- Camera -->
+<video id="cam" autoplay playsinline muted></video>
+
+<!-- Aura + connection line canvas -->
+<canvas id="overlay"></canvas>
+
+<!-- Hand cursor SVG -->
+<svg id="hand-cursor" viewBox="0 0 38 38" xmlns="http://www.w3.org/2000/svg">
+  <circle cx="19" cy="19" r="16" fill="none" stroke="rgba(255,255,255,0.55)" stroke-width="1.5"/>
+  <!-- r=13.5, circumference ≈ 84.82 -->
+  <circle id="dwell-arc" cx="19" cy="19" r="13.5"
+          fill="none" stroke="#60a5fa" stroke-width="3"
+          stroke-linecap="round"
+          stroke-dasharray="84.82" stroke-dashoffset="84.82"
+          transform="rotate(-90 19 19)"
+          style="transition: stroke-dashoffset 0.06s linear;"/>
+  <circle cx="19" cy="19" r="2.5" fill="rgba(255,255,255,0.92)"/>
+</svg>
+
+<!-- Stats pill -->
+<div id="stats-pill">📚 Yükleniyor…</div>
+
+<!-- Legend -->
+<div id="legend">
+  <div class="legend-item"><div class="legend-dot" style="background:#86efac"></div> Okundu</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#fbbf24"></div> Okunmadı</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#60a5fa"></div> Okunuyor</div>
+</div>
+
+<!-- Title pill (Level 2) -->
+<div id="title-pill"></div>
+
+<!-- Info card (Level 3) -->
+<div id="info-card">
+  <div class="card-top">
+    <div class="card-genre" id="c-genre">—</div>
+    <div class="card-title"  id="c-title">—</div>
+    <div class="card-author" id="c-author">—</div>
   </div>
-
-  <!-- Error overlay (hidden by default) -->
-  <div id="errorOverlay" style="display:none">
-    <div class="error-box">
-      <h3>📷 Kamera Erişim Hatası</h3>
-      <p id="errorMsg">
-        Kamera başlatılamadı. Lütfen kamera iznini tarayıcı ayarlarından
-        etkinleştirin ve sayfayı yenileyin.<br><br>
-        <strong>Hata:</strong> Kamera başka bir uygulama tarafından kullanılıyor
-        olabilir (NotReadableError). Diğer sekmeleri veya uygulamaları kapatıp tekrar deneyin.
-      </p>
+  <div class="card-body">
+    <div class="status-block">
+      <div class="status-icon" id="c-icon">📚</div>
+      <div>
+        <div class="status-lbl">Durum</div>
+        <div class="status-val" id="c-status">—</div>
+      </div>
     </div>
+
+    <div class="meta-row">
+      <span class="meta-lbl">Yıl</span>
+      <span class="meta-val" id="c-year">—</span>
+    </div>
+    <div class="meta-row">
+      <span class="meta-lbl">Ülke</span>
+      <span class="meta-val" id="c-country">—</span>
+    </div>
+    <div class="meta-row">
+      <span class="meta-lbl">Çevirmen</span>
+      <span class="meta-val" id="c-translator">—</span>
+    </div>
+    <div class="meta-row" id="c-readby-row" style="flex-direction:column;align-items:flex-start;gap:6px;">
+      <span class="meta-lbl">Okuyan</span>
+      <div class="readers-row" id="c-readby"></div>
+    </div>
+
+    <button class="close-btn" id="close-btn">KAPAT ✕</button>
   </div>
+</div>
 
-  <!-- Camera video feed (back camera, no mirror) -->
-  <video id="cameraVideo" autoplay muted playsinline></video>
+<!-- Status bar -->
+<div id="status-bar">📷 Başlatılıyor…</div>
 
-  <!-- Three.js canvas — overlaid, alpha: true -->
-  <canvas id="threeCanvas"></canvas>
+<!-- Loading -->
+<div id="loading">
+  <div class="ld-logo">📚</div>
+  <div class="ld-title">AR Kütüphane</div>
+  <div class="ld-step" id="ld-step">Hazırlanıyor…</div>
+  <div class="ld-bar"><div class="ld-fill" id="ld-fill"></div></div>
+</div>
 
-  <!-- Connection line between card and book anchor -->
-  <canvas id="connectionCanvas"></canvas>
-
-  <!-- Hand cursor -->
-  <div id="handCursor"></div>
-
-  <!-- Demo mode badge -->
-  <div id="demoBadge">📖 Demo Modu</div>
-
-  <!-- Status bar -->
-  <div id="statusBar">🔍 Kitap aranıyor…</div>
-
-  <!-- Simulate book found button -->
-  <button id="simBtn" style="display:none">📚 Kitabı Simüle Et</button>
-
-  <!-- Floating "KÜNYEYI AÇ" button -->
-  <button id="openCardBtn">KÜNYEYI AÇ</button>
-
-  <!-- Spatial Info Card -->
-  <div id="infoCard">
-    <div class="card-header">
-      <div class="genre-badge">Bilim Kurgu</div>
-      <h2>Kıyamete Bir Milyar Yıl</h2>
-      <div class="author">Boris &amp; Arkadi Strugatski</div>
-    </div>
-    <div class="card-body">
-      <!-- Prominent read date -->
-      <div class="read-date-block">
-        <div class="icon">📅</div>
-        <div>
-          <div class="label">Okunma Tarihi</div>
-          <div class="date-value">03.02.2023</div>
-        </div>
-      </div>
-
-      <!-- Meta rows -->
-      <div class="meta-row">
-        <span class="meta-label">Yayınevi</span>
-        <span class="meta-value">İthaki Yayınları</span>
-      </div>
-      <div class="meta-row">
-        <span class="meta-label">Tür</span>
-        <span class="meta-value">Bilim Kurgu</span>
-      </div>
-      <div class="meta-row">
-        <span class="meta-label">Yazar</span>
-        <span class="meta-value">Boris &amp; Arkadi Strugatski</span>
-      </div>
-      <div class="meta-row">
-        <span class="meta-label">Durum</span>
-        <span class="meta-value" style="color:#86efac">✓ Okundu</span>
-      </div>
-
-      <!-- Close button -->
-      <button class="close-btn" id="closeCardBtn">KAPAT ✕</button>
-    </div>
+<!-- Error -->
+<div id="error">
+  <div class="err-box">
+    <h3>⚠️ Hata</h3>
+    <p id="err-msg">Bir hata oluştu.</p>
+    <p style="font-size:11.5px;color:rgba(255,255,255,0.35)">
+      Sayfayı yenileyin, kamera iznini kontrol edin ve HTTPS kullanıldığından emin olun.
+    </p>
+    <div class="err-code" id="err-code" style="display:none"></div>
   </div>
+</div>
 
-  <script>
-  /**
-   * ══════════════════════════════════════════════════════════
-   *  Magic Window — Kitap AR  |  Single-file prototype
-   *  Demo mode: simulated book tracking + MediaPipe hands
-   * ══════════════════════════════════════════════════════════
-   */
+<script>
+/* ═══════════════════════════════════════════════════════════════════
+ *  AR KÜTÜPHANESİ
+ *  OCR (Tesseract.js) + Fuzzy match (Fuse.js) + Hand tracking (MediaPipe)
+ *
+ *  UX Levels:
+ *    1 — Ambient: colored aura overlays on recognized spines
+ *    2 — Browse:  title pill when cursor enters spine region
+ *    3 — Focus:   full info card on 1.2s dwell
+ * ═══════════════════════════════════════════════════════════════════ */
 
-  // ── DOM refs ──────────────────────────────────────────────
-  const video         = document.getElementById('cameraVideo');
-  const threeCanvas   = document.getElementById('threeCanvas');
-  const connCanvas    = document.getElementById('connectionCanvas');
-  const handCursor    = document.getElementById('handCursor');
-  const statusBar     = document.getElementById('statusBar');
-  const simBtn        = document.getElementById('simBtn');
-  const openCardBtn   = document.getElementById('openCardBtn');
-  const infoCard      = document.getElementById('infoCard');
-  const closeCardBtn  = document.getElementById('closeCardBtn');
-  const loadingOverlay= document.getElementById('loadingOverlay');
-  const errorOverlay  = document.getElementById('errorOverlay');
-  const errorMsg      = document.getElementById('errorMsg');
-  const connCtx       = connCanvas.getContext('2d');
+// ─── CONFIG ─────────────────────────────────────────────────────────
+const CFG = {
+  OCR_WIDTH    : 640,       // Downscale video to this width for OCR
+  OCR_INTERVAL : 500,       // ms between OCR passes
+  CACHE_MS     : 2000,      // How long a detected book stays visible after last seen
+  DWELL_MS     : 1200,      // ms to hold cursor for dwell trigger
+  MATCH_THRESH : 0.45,      // Fuse score threshold (lower = stricter)
+  NGRAM_MAX    : 5,         // Max words per search phrase
+  AURA_R       : 14,        // Aura corner radius
+  AURA_PAD     : 12,        // Extra padding around OCR bbox
+};
 
-  // ── State ─────────────────────────────────────────────────
-  const state = {
-    bookFound    : false,
-    cardOpen     : false,
-    // Last known screen position of the book anchor
-    bookPos      : { x: window.innerWidth * 0.5, y: window.innerHeight * 0.45 },
-    // Hand tracking
-    cursorPos    : { x: -200, y: -200 },
-    pinching     : false,
-    pinchCooldown: false,
-    handVisible  : false,
-  };
+const CIRCUMFERENCE = 2 * Math.PI * 13.5; // ≈ 84.82
 
-  // ── Resize helpers ────────────────────────────────────────
-  function resizeAll() {
-    connCanvas.width  = window.innerWidth;
-    connCanvas.height = window.innerHeight;
-    // Reposition book anchor on resize
-    state.bookPos.x = window.innerWidth  * (window.innerWidth > window.innerHeight ? 0.42 : 0.5);
-    state.bookPos.y = window.innerHeight * 0.42;
-    positionOpenCardBtn();
-    resizeThreeRenderer();
+const STATUS_STYLE = {
+  'read'        : { stroke:'rgba(134,239,172,0.88)', fill:'rgba(134,239,172,0.08)', glow:'#86efac', icon:'📅', label:'Okundu'   },
+  'unread'      : { stroke:'rgba(251,191,36,0.88)',  fill:'rgba(251,191,36,0.08)',  glow:'#fbbf24', icon:'📚', label:'Okunmadı' },
+  'in-progress' : { stroke:'rgba(96,165,250,0.88)',  fill:'rgba(96,165,250,0.08)',  glow:'#60a5fa', icon:'📖', label:'Okunuyor' },
+};
+
+// ─── DOM REFS ────────────────────────────────────────────────────────
+const $ = id => document.getElementById(id);
+const cam       = $('cam');
+const overlay   = $('overlay');
+const ctx       = overlay.getContext('2d');
+const handEl    = $('hand-cursor');
+const dwellArc  = $('dwell-arc');
+const statsPill = $('stats-pill');
+const titlePill = $('title-pill');
+const infoCard  = $('info-card');
+const closeBtn  = $('close-btn');
+const statusBar = $('status-bar');
+const ldStep    = $('ld-step');
+const ldFill    = $('ld-fill');
+const loadingEl = $('loading');
+const errorEl   = $('error');
+
+// ─── STATE ──────────────────────────────────────────────────────────
+const S = {
+  books      : [],
+  fuse       : null,
+  // Active detections: [{book, region:{x,y,w,h}, lastSeen}]
+  detected   : [],
+  hovered    : null,   // det object cursor is over
+  cardBook   : null,   // book currently in info card
+  cardRegion : null,   // last known region of cardBook
+  // Cursor
+  cursor     : { x: -300, y: -300, visible: false },
+  // Dwell
+  dwell      : { target: null, start: 0, cooldown: false },
+  // OCR
+  ocrWorker  : null,
+  ocrReady   : false,
+  ocrBusy    : false,
+  offCanvas  : document.createElement('canvas'),
+};
+
+// ─── LOADING UI ─────────────────────────────────────────────────────
+function setLoad(step, pct) {
+  ldStep.textContent     = step;
+  ldFill.style.width     = pct + '%';
+}
+function hideLoading() {
+  loadingEl.style.transition = 'opacity 0.5s ease';
+  loadingEl.style.opacity    = '0';
+  setTimeout(() => loadingEl.style.display = 'none', 520);
+}
+function showError(msg, detail) {
+  loadingEl.style.display = 'none';
+  $('err-msg').textContent = msg;
+  if (detail) {
+    $('err-code').style.display = 'block';
+    $('err-code').textContent   = String(detail);
   }
-  window.addEventListener('resize', resizeAll);
+  errorEl.style.display = 'flex';
+}
 
-  // ─────────────────────────────────────────────────────────
-  // THREE.JS SETUP
-  // ─────────────────────────────────────────────────────────
-  let renderer, scene, camera, particleSystem;
+// ─── RESIZE ─────────────────────────────────────────────────────────
+function resize() {
+  overlay.width  = window.innerWidth;
+  overlay.height = window.innerHeight;
+}
+window.addEventListener('resize', resize);
+resize();
 
-  function initThree() {
-    renderer = new THREE.WebGLRenderer({ canvas: threeCanvas, alpha: true, antialias: true });
-    renderer.setPixelRatio(window.devicePixelRatio);
-    renderer.setClearColor(0x000000, 0);  // transparent background
-    resizeThreeRenderer();
-
-    scene  = new THREE.Scene();
-    camera = new THREE.PerspectiveCamera(60, threeCanvas.width / threeCanvas.height, 0.01, 100);
-    camera.position.set(0, 0, 0);
-
-    // Subtle ambient particles — floating specks in the scene
-    const particleCount = 80;
-    const positions = new Float32Array(particleCount * 3);
-    for (let i = 0; i < particleCount; i++) {
-      positions[i * 3 + 0] = (Math.random() - 0.5) * 3;
-      positions[i * 3 + 1] = (Math.random() - 0.5) * 2;
-      positions[i * 3 + 2] = -0.5 - Math.random() * 1.5;
-    }
-    const pGeo = new THREE.BufferGeometry();
-    pGeo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-    const pMat = new THREE.PointsMaterial({ color: 0xffffff, size: 0.008, transparent: true, opacity: 0.35 });
-    particleSystem = new THREE.Points(pGeo, pMat);
-    // Particles only visible once book is found
-    particleSystem.visible = false;
-    scene.add(particleSystem);
-
-    animateThree();
-  }
-
-  function resizeThreeRenderer() {
-    if (!renderer) return;
-    renderer.setSize(window.innerWidth, window.innerHeight);
-    if (camera) {
-      camera.aspect = window.innerWidth / window.innerHeight;
-      camera.updateProjectionMatrix();
-    }
-  }
-
-  function animateThree() {
-    requestAnimationFrame(animateThree);
-    const t = performance.now() * 0.001;
-    if (particleSystem && particleSystem.visible) {
-      particleSystem.rotation.y = Math.sin(t * 0.12) * 0.08;
-      particleSystem.rotation.x = Math.cos(t * 0.09) * 0.04;
-      particleSystem.material.opacity = 0.25 + 0.1 * Math.sin(t * 0.8);
-    }
-    renderer.render(scene, camera);
-  }
-
-  // ─────────────────────────────────────────────────────────
-  // CAMERA START
-  // ─────────────────────────────────────────────────────────
-  async function startCamera() {
-    const constraints = {
-      video: {
-        facingMode: { ideal: 'environment' },
-        width:  { ideal: 1280 },
-        height: { ideal: 720 },
-      },
-      audio: false,
-    };
-
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia(constraints);
-      video.srcObject = stream;
-      await video.play();
-      loadingOverlay.style.display = 'none';
-      onCameraReady();
-    } catch (err) {
-      loadingOverlay.style.display = 'none';
-      let msg = `<strong>Hata:</strong> ${err.name} — ${err.message}<br><br>`;
-      if (err.name === 'NotReadableError' || err.name === 'TrackStartError') {
-        msg += 'Kamera başka bir uygulama veya sekme tarafından kullanılıyor. ' +
-               'Diğer kamera uygulamalarını kapatıp sayfayı yenileyin.';
-      } else if (err.name === 'NotAllowedError') {
-        msg += 'Kamera erişimi reddedildi. Tarayıcı ayarlarından izni açın.';
-      } else if (err.name === 'NotFoundError') {
-        msg += 'Kamera bulunamadı. Cihazınızda kamera olduğundan emin olun.';
-      } else {
-        msg += 'Sayfayı yenileyin veya farklı bir tarayıcı deneyin.';
-      }
-      errorMsg.innerHTML = msg;
-      errorOverlay.style.display = 'flex';
-    }
+// ═══════════════════════════════════════════════════════════════════
+//  DATA — books.json + Fuse.js
+// ═══════════════════════════════════════════════════════════════════
+async function loadBooks() {
+  setLoad('Kitap verisi yükleniyor…', 10);
+  try {
+    const r = await fetch('./books.json');
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    S.books = await r.json();
+  } catch (e) {
+    console.warn('books.json not found, using sample data:', e.message);
+    S.books = SAMPLE_BOOKS;
   }
 
-  // ─────────────────────────────────────────────────────────
-  // SCENE READY — called after camera starts
-  // ─────────────────────────────────────────────────────────
-  function onCameraReady() {
-    resizeAll();
-    initThree();
-    startHandTracking();
-    startDemoFlow();
-  }
-
-  // ─────────────────────────────────────────────────────────
-  // DEMO FLOW (simulated book detection)
-  // ─────────────────────────────────────────────────────────
-  function startDemoFlow() {
-    // After 2 s show the simulate button
-    setTimeout(() => {
-      simBtn.style.display = 'block';
-    }, 2000);
-  }
-
-  simBtn.addEventListener('click', () => {
-    simBtn.style.display = 'none';
-    triggerBookFound();
+  S.fuse = new Fuse(S.books, {
+    keys: [
+      { name: 'title',    weight: 2   },
+      { name: 'titleAlt', weight: 1.5 },
+      { name: 'author',   weight: 0.8 },
+    ],
+    threshold        : CFG.MATCH_THRESH,
+    includeScore     : true,
+    minMatchCharLength: 4,
+    ignoreLocation   : true,
   });
 
-  function triggerBookFound() {
-    if (state.bookFound) return;
-    state.bookFound = true;
+  const read = S.books.filter(b => b.status === 'read').length;
+  statsPill.textContent = `${S.books.length} kitap · ${read} okundu`;
+}
 
-    // Update status bar
-    statusBar.textContent = '✅ Kitap Tanındı: Kıyamete Bir Milyar Yıl';
+// ═══════════════════════════════════════════════════════════════════
+//  OCR — Tesseract.js v4
+// ═══════════════════════════════════════════════════════════════════
+async function initOCR() {
+  setLoad('OCR motoru yükleniyor… (ilk açılışta ~30sn)', 35);
 
-    // Show particles
-    if (particleSystem) particleSystem.visible = true;
-
-    // Show floating button
-    positionOpenCardBtn();
-    openCardBtn.classList.add('visible');
-  }
-
-  // ─────────────────────────────────────────────────────────
-  // FLOATING BUTTON POSITION
-  // ─────────────────────────────────────────────────────────
-  function positionOpenCardBtn() {
-    // Float above the book anchor position
-    openCardBtn.style.left = state.bookPos.x + 'px';
-    openCardBtn.style.top  = (state.bookPos.y - 70) + 'px';
-  }
-
-  // ─────────────────────────────────────────────────────────
-  // CARD OPEN / CLOSE
-  // ─────────────────────────────────────────────────────────
-  function openCard() {
-    if (state.cardOpen) return;
-    state.cardOpen = true;
-    infoCard.classList.add('visible');
-    drawConnectionLine();
-  }
-
-  function closeCard() {
-    if (!state.cardOpen) return;
-    state.cardOpen = false;
-    infoCard.classList.remove('visible');
-    clearConnectionLine();
-  }
-
-  openCardBtn.addEventListener('click', openCard);
-  closeCardBtn.addEventListener('click', closeCard);
-
-  // ─────────────────────────────────────────────────────────
-  // CONNECTION LINE (card ↔ book anchor)
-  // ─────────────────────────────────────────────────────────
-  let connAnimFrame = null;
-
-  function drawConnectionLine() {
-    if (connAnimFrame) cancelAnimationFrame(connAnimFrame);
-
-    function draw() {
-      if (!state.cardOpen) return;
-      connCtx.clearRect(0, 0, connCanvas.width, connCanvas.height);
-
-      // Card center position
-      const cardRect = infoCard.getBoundingClientRect();
-      const cx = cardRect.left + cardRect.width  * 0.5;
-      const cy = cardRect.top  + cardRect.height * 0.5;
-
-      // Book anchor
-      const bx = state.bookPos.x;
-      const by = state.bookPos.y;
-
-      const grad = connCtx.createLinearGradient(bx, by, cx, cy);
-      grad.addColorStop(0, 'rgba(255,255,255,0.55)');
-      grad.addColorStop(1, 'rgba(255,255,255,0.05)');
-
-      connCtx.beginPath();
-      connCtx.moveTo(bx, by);
-      connCtx.lineTo(cx, cy);
-      connCtx.strokeStyle = grad;
-      connCtx.lineWidth   = 1.2;
-      connCtx.setLineDash([5, 6]);
-      connCtx.stroke();
-
-      // Anchor dot
-      connCtx.beginPath();
-      connCtx.arc(bx, by, 5, 0, Math.PI * 2);
-      connCtx.fillStyle = 'rgba(255,255,255,0.65)';
-      connCtx.fill();
-
-      connAnimFrame = requestAnimationFrame(draw);
+  const logFn = m => {
+    if (m.status && m.progress != null) {
+      const p = 35 + Math.round(m.progress * 30);
+      setLoad(`OCR: ${m.status} ${Math.round(m.progress * 100)}%`, Math.min(p, 65));
     }
-    draw();
+  };
+
+  // Try Turkish + English; fall back to English only
+  let langs = 'tur+eng';
+  try {
+    S.ocrWorker = await Tesseract.createWorker(langs, 1, { logger: logFn });
+  } catch (e) {
+    console.warn('tur+eng failed, trying eng only:', e.message);
+    try {
+      langs = 'eng';
+      S.ocrWorker = await Tesseract.createWorker(langs, 1, { logger: logFn });
+    } catch (e2) {
+      showError('OCR motoru başlatılamadı.', e2.message);
+      return false;
+    }
   }
 
-  function clearConnectionLine() {
-    if (connAnimFrame) cancelAnimationFrame(connAnimFrame);
-    connCtx.clearRect(0, 0, connCanvas.width, connCanvas.height);
+  // PSM 6 = single uniform block of text (good for spine text)
+  await S.ocrWorker.setParameters({ tessedit_pageseg_mode: '6' });
+  S.ocrReady = true;
+  return true;
+}
+
+// Rotate a canvas CW (+90) or CCW (-90)
+function rotateCanvas(src, deg) {
+  const dst = document.createElement('canvas');
+  dst.width  = src.height;
+  dst.height = src.width;
+  const c = dst.getContext('2d');
+  c.save();
+  if (deg === 90) {
+    c.translate(dst.width, 0);
+    c.rotate(Math.PI / 2);
+  } else {
+    c.translate(0, dst.height);
+    c.rotate(-Math.PI / 2);
+  }
+  c.drawImage(src, 0, 0);
+  c.restore();
+  return dst;
+}
+
+// Map an OCR bounding box back to screen-normalized coords,
+// accounting for the rotation that was applied before OCR.
+function bboxToScreen(bbox, ocrW, ocrH, deg) {
+  const nx0 = bbox.x0 / ocrW, ny0 = bbox.y0 / ocrH;
+  const nx1 = bbox.x1 / ocrW, ny1 = bbox.y1 / ocrH;
+  let ox0, oy0, ox1, oy1;
+
+  if (deg === 90) {
+    // CW: rotated(nx,ny) came from original(ny, 1-nx)
+    ox0 = ny0;  oy0 = 1 - nx1;
+    ox1 = ny1;  oy1 = 1 - nx0;
+  } else if (deg === -90) {
+    // CCW: rotated(nx,ny) came from original(1-ny, nx)
+    ox0 = 1 - ny1; oy0 = nx0;
+    ox1 = 1 - ny0; oy1 = nx1;
+  } else {
+    ox0 = nx0; oy0 = ny0; ox1 = nx1; oy1 = ny1;
   }
 
-  // ─────────────────────────────────────────────────────────
-  // MEDIAPIPE HANDS
-  // ─────────────────────────────────────────────────────────
-  function startHandTracking() {
-    if (!window.Hands) {
-      console.warn('MediaPipe Hands library not loaded — hand tracking unavailable.');
+  const sw = window.innerWidth, sh = window.innerHeight;
+  const p  = CFG.AURA_PAD;
+  return {
+    x: ox0 * sw - p,
+    y: oy0 * sh - p,
+    w: (ox1 - ox0) * sw + p * 2,
+    h: (oy1 - oy0) * sh + p * 2,
+  };
+}
+
+// Slide a window of n-grams over OCR words and find the best Fuse match.
+// Returns { book, score, region } or null.
+function findBestMatch(data, ocrW, ocrH, deg) {
+  if (!S.fuse) return null;
+  const words = (data.words || []).filter(w => w.confidence > 40 && w.text.trim().length > 1);
+  if (words.length === 0) return null;
+
+  let best = null;
+
+  for (let n = 1; n <= Math.min(CFG.NGRAM_MAX, words.length); n++) {
+    for (let i = 0; i <= words.length - n; i++) {
+      const slice  = words.slice(i, i + n);
+      const phrase = slice.map(w => w.text).join(' ').trim();
+      if (phrase.length < 4) continue;
+
+      const results = S.fuse.search(phrase);
+      if (!results.length) continue;
+
+      const top = results[0];
+      if (!best || top.score < best.score) {
+        // Union bbox of the matched word slice
+        const bbox = {
+          x0: Math.min(...slice.map(w => w.bbox.x0)),
+          y0: Math.min(...slice.map(w => w.bbox.y0)),
+          x1: Math.max(...slice.map(w => w.bbox.x1)),
+          y1: Math.max(...slice.map(w => w.bbox.y1)),
+        };
+        best = { book: top.item, score: top.score, region: bboxToScreen(bbox, ocrW, ocrH, deg) };
+      }
+    }
+  }
+
+  return best;
+}
+
+// Main OCR processing pass — called every CFG.OCR_INTERVAL ms
+async function processFrame() {
+  if (S.ocrBusy || !S.ocrReady || !cam.videoWidth) return;
+  S.ocrBusy = true;
+
+  try {
+    const vw = cam.videoWidth, vh = cam.videoHeight;
+    const ocrH = Math.round(vh * (CFG.OCR_WIDTH / vw));
+
+    S.offCanvas.width  = CFG.OCR_WIDTH;
+    S.offCanvas.height = ocrH;
+    S.offCanvas.getContext('2d').drawImage(cam, 0, 0, CFG.OCR_WIDTH, ocrH);
+
+    const rotations = [0, 90, -90];
+    let overall = null;
+
+    for (const deg of rotations) {
+      const canvas = deg === 0 ? S.offCanvas : rotateCanvas(S.offCanvas, deg);
+      const { data } = await S.ocrWorker.recognize(canvas);
+      const match = findBestMatch(data, canvas.width, canvas.height, deg);
+      if (match && (!overall || match.score < overall.score)) overall = match;
+      if (overall && overall.score < 0.08) break; // Near-perfect — skip remaining rotations
+    }
+
+    if (overall) {
+      const existing = S.detected.find(d => d.book.id === overall.book.id);
+      if (existing) {
+        existing.region   = overall.region;
+        existing.lastSeen = Date.now();
+      } else {
+        S.detected.push({ book: overall.book, region: overall.region, lastSeen: Date.now() });
+      }
+      setStatus(`✓ ${overall.book.title}`, '#86efac');
+    }
+
+    // Expire stale entries
+    const now = Date.now();
+    S.detected = S.detected.filter(d => now - d.lastSeen < CFG.CACHE_MS);
+
+    if (S.detected.length === 0 && !S.cardBook) {
+      setStatus('📷 Kitaplığa kamerayı tutun…');
+    }
+
+  } finally {
+    S.ocrBusy = false;
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════
+//  CAMERA
+// ═══════════════════════════════════════════════════════════════════
+async function initCamera() {
+  setLoad('Kamera başlatılıyor…', 68);
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({
+      video: {
+        facingMode : { ideal: 'environment' },
+        width      : { ideal: 1280 },
+        height     : { ideal: 720 },
+      }
+    });
+    cam.srcObject = stream;
+    await new Promise((res, rej) => {
+      cam.onloadedmetadata = res;
+      cam.onerror = rej;
+    });
+    await cam.play();
+  } catch (e) {
+    showError(
+      'Kamera erişimi başarısız. Kamera iznini verin ve HTTPS kullanıldığından emin olun.',
+      e.name + ': ' + e.message
+    );
+    return false;
+  }
+  return true;
+}
+
+// ═══════════════════════════════════════════════════════════════════
+//  HAND TRACKING — MediaPipe Hands
+// ═══════════════════════════════════════════════════════════════════
+function initHandTracking() {
+  if (!window.Hands) {
+    console.warn('MediaPipe Hands not loaded — hand tracking unavailable');
+    return;
+  }
+
+  const hands = new Hands({
+    locateFile: f => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${f}`
+  });
+  hands.setOptions({
+    maxNumHands            : 1,
+    modelComplexity        : 0,
+    minDetectionConfidence : 0.7,
+    minTrackingConfidence  : 0.6,
+  });
+  hands.onResults(onHandResults);
+
+  if (window.Camera) {
+    new Camera(cam, {
+      onFrame: async () => hands.send({ image: cam }),
+      width: 640, height: 480,
+    }).start();
+  } else {
+    (async function loop() {
+      if (cam.readyState >= 2) await hands.send({ image: cam });
+      requestAnimationFrame(loop);
+    })();
+  }
+}
+
+function onHandResults(results) {
+  if (!results.multiHandLandmarks || !results.multiHandLandmarks.length) {
+    S.cursor.visible   = false;
+    handEl.style.display = 'none';
+    resetDwell();
+    if (S.hovered) { S.hovered = null; hideTitlePill(); }
+    return;
+  }
+
+  S.cursor.visible   = true;
+  handEl.style.display = 'block';
+
+  // Index fingertip (landmark 8)
+  const tip = results.multiHandLandmarks[0][8];
+  S.cursor.x = tip.x * window.innerWidth;
+  S.cursor.y = tip.y * window.innerHeight;
+
+  handEl.style.left = S.cursor.x + 'px';
+  handEl.style.top  = S.cursor.y + 'px';
+
+  tickDwell();
+}
+
+// ═══════════════════════════════════════════════════════════════════
+//  DWELL SYSTEM
+// ═══════════════════════════════════════════════════════════════════
+function tickDwell() {
+  if (S.dwell.cooldown) { resetDwellArc(); return; }
+
+  const { x, y } = S.cursor;
+
+  // ── Priority 1: close button (when card is open) ─────────────
+  if (S.cardBook) {
+    const r = closeBtn.getBoundingClientRect();
+    if (x >= r.left - 10 && x <= r.right + 10 && y >= r.top - 10 && y <= r.bottom + 10) {
+      closeBtn.classList.add('dwell-active');
+      if (S.dwell.target !== 'close') { S.dwell.target = 'close'; S.dwell.start = performance.now(); }
+      const p = Math.min((performance.now() - S.dwell.start) / CFG.DWELL_MS, 1);
+      updateDwellArc(p);
+      if (p >= 1) fireDwell(() => { closeCard(); }, closeBtn, 'close');
+      return;
+    }
+    closeBtn.classList.remove('dwell-active');
+  }
+
+  // ── Priority 2: book spine regions ───────────────────────────
+  if (!S.cardBook) {
+    const hit = S.detected.find(det => {
+      const r = det.region;
+      return x >= r.x - 18 && x <= r.x + r.w + 18 && y >= r.y - 18 && y <= r.y + r.h + 18;
+    });
+
+    if (hit) {
+      // Level 2 — title pill
+      if (S.hovered !== hit) { S.hovered = hit; showTitlePill(hit); }
+
+      const key = 'book_' + hit.book.id;
+      if (S.dwell.target !== key) { S.dwell.target = key; S.dwell.start = performance.now(); }
+      const p = Math.min((performance.now() - S.dwell.start) / CFG.DWELL_MS, 1);
+      updateDwellArc(p);
+
+      if (p >= 1) fireDwell(() => openCard(hit.book, hit.region), null, key);
       return;
     }
 
-    const hands = new Hands({
-      locateFile: (file) =>
-        `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`,
+    if (S.hovered) { S.hovered = null; hideTitlePill(); }
+  }
+
+  resetDwell();
+}
+
+function fireDwell(action, el, key) {
+  S.dwell.cooldown = true;
+  if (el) {
+    el.classList.remove('dwell-active');
+    el.classList.add('dwell-flash');
+    el.addEventListener('animationend', () => el.classList.remove('dwell-flash'), { once: true });
+  }
+  action();
+  S.dwell.target = null;
+  resetDwellArc();
+  setTimeout(() => { S.dwell.cooldown = false; }, 1800);
+}
+
+function resetDwell() {
+  if (S.dwell.target) {
+    closeBtn.classList.remove('dwell-active');
+    S.dwell.target = null;
+  }
+  S.dwell.start = 0;
+  resetDwellArc();
+}
+
+function updateDwellArc(progress) {
+  dwellArc.style.strokeDashoffset = (CIRCUMFERENCE * (1 - progress)).toFixed(2);
+}
+function resetDwellArc() {
+  dwellArc.style.strokeDashoffset = CIRCUMFERENCE.toFixed(2);
+}
+
+// ═══════════════════════════════════════════════════════════════════
+//  CARD — Open / Close
+// ═══════════════════════════════════════════════════════════════════
+function openCard(book, region) {
+  S.cardBook   = book;
+  S.cardRegion = region;
+  hideTitlePill();
+
+  const ss = STATUS_STYLE[book.status] || STATUS_STYLE.unread;
+
+  $('c-genre').textContent  = book.genre    || '—';
+  $('c-title').textContent  = book.title;
+  $('c-author').textContent = book.author;
+  $('c-icon').textContent   = ss.icon;
+
+  const statusText = [
+    ss.label,
+    book.readDate ? '· ' + book.readDate : ''
+  ].join(' ').trim();
+  $('c-status').textContent     = statusText;
+  $('c-year').textContent       = book.year        || '—';
+  $('c-country').textContent    = (book.countryFlag || '') + ' ' + (book.country || '—');
+  $('c-translator').textContent = book.translator  || '—';
+
+  const rbEl = $('c-readby');
+  rbEl.innerHTML = '';
+  if (book.readBy && book.readBy.length) {
+    book.readBy.forEach(name => {
+      const chip = document.createElement('span');
+      chip.className   = 'reader-chip';
+      chip.textContent = name;
+      rbEl.appendChild(chip);
     });
-
-    hands.setOptions({
-      maxNumHands       : 1,
-      modelComplexity   : 0,   // 0 = lite, faster on mobile
-      minDetectionConfidence: 0.7,
-      minTrackingConfidence : 0.6,
-    });
-
-    hands.onResults(onHandResults);
-
-    // Use MediaPipe Camera utility to feed video frames
-    if (window.Camera) {
-      const mpCam = new Camera(video, {
-        onFrame: async () => { await hands.send({ image: video }); },
-        width: 640, height: 480,
-      });
-      mpCam.start();
-    } else {
-      // Fallback: manual requestAnimationFrame loop
-      async function processFrame() {
-        if (video.readyState >= 2) await hands.send({ image: video });
-        requestAnimationFrame(processFrame);
-      }
-      processFrame();
-    }
+  } else {
+    rbEl.innerHTML = '<span style="color:rgba(255,255,255,0.4);font-size:13px">—</span>';
   }
 
-  // ── Process MediaPipe hand landmarks ─────────────────────
-  function onHandResults(results) {
-    if (!results.multiHandLandmarks || results.multiHandLandmarks.length === 0) {
-      state.handVisible = false;
-      handCursor.style.display = 'none';
-      return;
-    }
+  setStatus('');
+  infoCard.classList.add('visible');
+}
 
-    state.handVisible = true;
-    handCursor.style.display = 'block';
+function closeCard() {
+  S.cardBook   = null;
+  S.cardRegion = null;
+  infoCard.classList.remove('visible');
+  setStatus(S.detected.length ? `✓ ${S.detected[0].book.title}` : '📷 Kitaplığa kamerayı tutun…');
+}
 
-    const landmarks = results.multiHandLandmarks[0];
+closeBtn.addEventListener('click', closeCard);
 
-    // Landmark indices: 8 = index tip, 4 = thumb tip
-    const indexTip = landmarks[8];
-    const thumbTip = landmarks[4];
+// ═══════════════════════════════════════════════════════════════════
+//  TITLE PILL — Level 2
+// ═══════════════════════════════════════════════════════════════════
+function showTitlePill(det) {
+  const r = det.region;
+  const cx = r.x + r.w / 2;
+  const ty = r.y;
+  titlePill.textContent = `${det.book.title} · ${det.book.year} ${det.book.countryFlag || ''}`;
+  titlePill.style.left  = cx + 'px';
+  titlePill.style.top   = ty + 'px';
+  titlePill.classList.add('visible');
+}
+function hideTitlePill() {
+  titlePill.classList.remove('visible');
+}
 
-    // MediaPipe coords are normalized [0,1].
-    // Back camera: x is NOT flipped (no mirroring).
-    const sw = window.innerWidth;
-    const sh = window.innerHeight;
+// ═══════════════════════════════════════════════════════════════════
+//  RENDER LOOP — canvas auras + connection line
+// ═══════════════════════════════════════════════════════════════════
+function render() {
+  ctx.clearRect(0, 0, overlay.width, overlay.height);
 
-    const ix = indexTip.x * sw;
-    const iy = indexTip.y * sh;
-
-    state.cursorPos.x = ix;
-    state.cursorPos.y = iy;
-
-    handCursor.style.left = ix + 'px';
-    handCursor.style.top  = iy + 'px';
-
-    // Pinch detection: distance between index tip and thumb tip
-    const dx = (indexTip.x - thumbTip.x) * sw;
-    const dy = (indexTip.y - thumbTip.y) * sh;
-    const dist = Math.sqrt(dx * dx + dy * dy);
-    const pinchThreshold = 36; // px
-
-    const wasPinching = state.pinching;
-    state.pinching = dist < pinchThreshold;
-
-    if (state.pinching) {
-      handCursor.classList.add('pinch');
-    } else {
-      handCursor.classList.remove('pinch');
-    }
-
-    // Pinch start event (leading edge)
-    if (state.pinching && !wasPinching && !state.pinchCooldown) {
-      onPinchStart(ix, iy);
-    }
-
-    // Hover check for "KÜNYEYI AÇ" button
-    checkButtonHover(ix, iy);
+  // Level 1 — Ambient auras
+  const now = Date.now();
+  for (const det of S.detected) {
+    if (now - det.lastSeen > CFG.CACHE_MS) continue;
+    const ss   = STATUS_STYLE[det.book.status] || STATUS_STYLE.unread;
+    const fade = 1 - Math.max(0, (now - det.lastSeen) / CFG.CACHE_MS) * 0.4;
+    drawAura(det.region, ss, fade);
   }
 
-  // ── Pinch → interact with UI ──────────────────────────────
-  function onPinchStart(x, y) {
-    state.pinchCooldown = true;
-    setTimeout(() => { state.pinchCooldown = false; }, 600);
+  // Connection line if card is open
+  if (S.cardBook && S.cardRegion) drawConnectionLine();
 
-    // Check if pinching "KÜNYEYI AÇ" button
-    if (state.bookFound && !state.cardOpen) {
-      const btnRect = openCardBtn.getBoundingClientRect();
-      if (hitTest(x, y, btnRect, 30)) {
-        openCard();
-        return;
-      }
-    }
+  requestAnimationFrame(render);
+}
 
-    // Check if pinching close button
-    if (state.cardOpen) {
-      const closeRect = closeCardBtn.getBoundingClientRect();
-      if (hitTest(x, y, closeRect, 24)) {
-        closeCard();
-        return;
-      }
-    }
+function drawAura(region, ss, alpha) {
+  const { x, y, w, h } = region;
+  const r = CFG.AURA_R;
+
+  ctx.save();
+  ctx.globalAlpha = alpha;
+
+  // Outer glow
+  ctx.shadowColor  = ss.glow;
+  ctx.shadowBlur   = 28;
+
+  // Fill
+  ctx.fillStyle = ss.fill;
+  rrect(x, y, w, h, r);
+  ctx.fill();
+
+  // Stroke
+  ctx.shadowBlur   = 20;
+  ctx.strokeStyle  = ss.stroke;
+  ctx.lineWidth    = 2.5;
+  rrect(x, y, w, h, r);
+  ctx.stroke();
+
+  ctx.restore();
+}
+
+// Rounded rect path helper
+function rrect(x, y, w, h, r) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.lineTo(x + w - r, y);
+  ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+  ctx.lineTo(x + w, y + h - r);
+  ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+  ctx.lineTo(x + r, y + h);
+  ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+  ctx.lineTo(x, y + r);
+  ctx.quadraticCurveTo(x, y, x + r, y);
+  ctx.closePath();
+}
+
+function drawConnectionLine() {
+  const cr = infoCard.getBoundingClientRect();
+  if (!cr.width) return;
+
+  const reg = S.cardRegion;
+  const bx  = reg.x + reg.w / 2;
+  const by  = reg.y + reg.h / 2;
+  const ex  = cr.left + 20;
+  const ey  = cr.top  + cr.height * 0.5;
+
+  const grad = ctx.createLinearGradient(bx, by, ex, ey);
+  grad.addColorStop(0, 'rgba(96,165,250,0.72)');
+  grad.addColorStop(0.5, 'rgba(96,165,250,0.32)');
+  grad.addColorStop(1, 'rgba(96,165,250,0.04)');
+
+  ctx.save();
+  ctx.beginPath();
+  ctx.moveTo(bx, by);
+  ctx.lineTo(ex, ey);
+  ctx.strokeStyle = grad;
+  ctx.lineWidth   = 1.5;
+  ctx.setLineDash([5, 7]);
+  ctx.stroke();
+  ctx.setLineDash([]);
+
+  ctx.beginPath();
+  ctx.arc(bx, by, 5, 0, Math.PI * 2);
+  ctx.fillStyle = 'rgba(96,165,250,0.75)';
+  ctx.fill();
+  ctx.restore();
+}
+
+// ─── STATUS BAR ──────────────────────────────────────────────────
+function setStatus(text, color) {
+  statusBar.textContent = text;
+  statusBar.style.color = color || 'rgba(255,255,255,0.82)';
+}
+
+// ═══════════════════════════════════════════════════════════════════
+//  SAMPLE BOOKS — fallback if books.json is not found
+// ═══════════════════════════════════════════════════════════════════
+const SAMPLE_BOOKS = [
+  { id:1,  title:"Kıyamete Bir Milyar Yıl", titleAlt:["Definitely Maybe"],                        author:"Arkadi ve Boris Strugatski", translator:"Ahmet Suat",    year:1974, country:"Rusya",     countryFlag:"🇷🇺", status:"read",        readBy:["Melik"],         readDate:"03.02.2023", genre:"Bilim Kurgu"       },
+  { id:2,  title:"Körlük",                  titleAlt:["Blindness","Ensaio sobre a Cegueira"],      author:"José Saramago",              translator:"Işık Ergüden", year:1995, country:"Portekiz",  countryFlag:"🇵🇹", status:"read",        readBy:["Melik","Ayşe"],  readDate:"15.06.2022", genre:"Distopya"          },
+  { id:3,  title:"Yüzyıllık Yalnızlık",     titleAlt:["One Hundred Years of Solitude"],           author:"Gabriel García Márquez",      translator:"Çiğdem Öztekin",year:1967, country:"Kolombiya", countryFlag:"🇨🇴", status:"read",        readBy:["Melik","Ayşe"],  readDate:"12.03.2021", genre:"Büyülü Gerçekçilik"},
+  { id:4,  title:"Suç ve Ceza",             titleAlt:["Crime and Punishment"],                    author:"Fyodor Dostoyevski",          translator:"Mazlum Beyhan",year:1866, country:"Rusya",     countryFlag:"🇷🇺", status:"read",        readBy:["Melik"],         readDate:"20.01.2022", genre:"Roman"             },
+  { id:5,  title:"1984",                    titleAlt:["Nineteen Eighty-Four"],                    author:"George Orwell",               translator:"Celal Üster",  year:1949, country:"İngiltere", countryFlag:"🇬🇧", status:"read",        readBy:["Melik","Ayşe"],  readDate:"05.11.2020", genre:"Distopya"          },
+  { id:6,  title:"Dune",                    titleAlt:["Dune Chronicles"],                         author:"Frank Herbert",               translator:"",             year:1965, country:"ABD",       countryFlag:"🇺🇸", status:"unread",      readBy:[],               readDate:null,         genre:"Bilim Kurgu"       },
+  { id:7,  title:"Sapiens",                 titleAlt:["Sapiens: A Brief History of Humankind"],   author:"Yuval Noah Harari",           translator:"Ertuğrul Genç",year:2011, country:"İsrail",    countryFlag:"🇮🇱", status:"read",        readBy:["Melik","Ayşe"],  readDate:"14.09.2023", genre:"Tarih"             },
+  { id:8,  title:"Siddhartha",              titleAlt:["Siddharta"],                               author:"Hermann Hesse",               translator:"Gürsel Aytaç", year:1922, country:"Almanya",   countryFlag:"🇩🇪", status:"in-progress", readBy:["Melik"],         readDate:null,         genre:"Felsefe"           },
+  { id:9,  title:"Küçük Prens",             titleAlt:["Le Petit Prince","The Little Prince"],     author:"Antoine de Saint-Exupéry",    translator:"Aykut Derman", year:1943, country:"Fransa",    countryFlag:"🇫🇷", status:"read",        readBy:["Melik","Ayşe"],  readDate:"03.04.2019", genre:"Klasik"            },
+  { id:10, title:"Hayvanlar Çiftliği",      titleAlt:["Animal Farm"],                             author:"George Orwell",               translator:"Celal Üster",  year:1945, country:"İngiltere", countryFlag:"🇬🇧", status:"unread",      readBy:[],               readDate:null,         genre:"Distopya"          },
+];
+
+// ═══════════════════════════════════════════════════════════════════
+//  BOOT
+// ═══════════════════════════════════════════════════════════════════
+async function boot() {
+  try {
+    await loadBooks();                          // 10–30%
+
+    const camOk = await initCamera();           // 68%
+    if (!camOk) return;
+
+    const ocrOk = await initOCR();             // 35–65%
+    if (!ocrOk) return;
+
+    setLoad('El takibi başlatılıyor…', 88);
+    initHandTracking();
+
+    setLoad('Hazır!', 100);
+    setTimeout(() => {
+      hideLoading();
+      setStatus('📷 Kitaplığa kamerayı tutun…');
+    }, 600);
+
+    // Start OCR loop
+    setInterval(processFrame, CFG.OCR_INTERVAL);
+
+    // Start render loop
+    render();
+
+  } catch (e) {
+    console.error('Boot error:', e);
+    showError('Uygulama başlatılamadı: ' + e.message, e.stack);
   }
+}
 
-  // ── Hover effect on floating button ──────────────────────
-  function checkButtonHover(x, y) {
-    if (!state.bookFound || state.cardOpen) return;
-    const btnRect = openCardBtn.getBoundingClientRect();
-    if (hitTest(x, y, btnRect, 20)) {
-      openCardBtn.classList.add('hovered');
-    } else {
-      openCardBtn.classList.remove('hovered');
-    }
-  }
-
-  // ── Hit test helper (rect + padding) ─────────────────────
-  function hitTest(x, y, rect, pad = 0) {
-    return x >= rect.left  - pad &&
-           x <= rect.right + pad &&
-           y >= rect.top   - pad &&
-           y <= rect.bottom + pad;
-  }
-
-  // ─────────────────────────────────────────────────────────
-  // BOOT
-  // ─────────────────────────────────────────────────────────
-  resizeAll();
-  startCamera();
-
-  </script>
+boot();
+</script>
 </body>
 </html>
