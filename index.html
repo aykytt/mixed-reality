@@ -395,6 +395,7 @@
       Reload the page, check camera permissions, and make sure you are using HTTPS.
     </p>
     <div class="err-code" id="err-code" style="display:none"></div>
+    <button onclick="location.reload()" style="margin-top:16px;padding:10px 24px;border-radius:10px;background:rgba(99,102,241,0.4);border:1px solid rgba(167,139,250,0.5);color:#fff;font-size:14px;font-weight:600;cursor:pointer;">Yeniden Yükle</button>
   </div>
 </div>
 
@@ -762,17 +763,10 @@ function initHandTracking() {
   });
   hands.onResults(onHandResults);
 
-  if (window.Camera) {
-    new Camera(cam, {
-      onFrame: async () => hands.send({ image: cam }),
-      width: 640, height: 480,
-    }).start();
-  } else {
-    (async function loop() {
-      if (cam.readyState >= 2) await hands.send({ image: cam });
-      requestAnimationFrame(loop);
-    })();
-  }
+  (async function loop() {
+    if (cam.readyState >= 2) await hands.send({ image: cam });
+    requestAnimationFrame(loop);
+  })();
 }
 
 function onHandResults(results) {
@@ -1045,16 +1039,16 @@ function setStatus(text, color) {
 //  SAMPLE BOOKS — fallback if books.json is not found
 // ═══════════════════════════════════════════════════════════════════
 const SAMPLE_BOOKS = [
-  { id:1,  title:"Kıyamete Bir Milyar Yıl", titleAlt:["Definitely Maybe"],                        author:"Arkady and Boris Strugatsky", translator:"Ahmet Suat",    year:1974, country:"Russia",    countryFlag:"🇷🇺", status:"read",        readBy:["Alex"],         readDate:"03.02.2023", genre:"Science Fiction"   },
-  { id:2,  title:"Körlük",                  titleAlt:["Blindness","Ensaio sobre a Cegueira"],      author:"José Saramago",              translator:"Işık Ergüden",  year:1995, country:"Portugal",  countryFlag:"🇵🇹", status:"read",        readBy:["Alex","Jamie"],  readDate:"15.06.2022", genre:"Dystopia"          },
-  { id:3,  title:"Yüzyıllık Yalnızlık",     titleAlt:["One Hundred Years of Solitude"],           author:"Gabriel García Márquez",      translator:"Çiğdem Öztekin",year:1967, country:"Colombia",  countryFlag:"🇨🇴", status:"read",        readBy:["Alex","Jamie"],  readDate:"12.03.2021", genre:"Magical Realism"   },
-  { id:4,  title:"Suç ve Ceza",             titleAlt:["Crime and Punishment"],                    author:"Fyodor Dostoevsky",           translator:"Mazlum Beyhan", year:1866, country:"Russia",    countryFlag:"🇷🇺", status:"read",        readBy:["Alex"],         readDate:"20.01.2022", genre:"Fiction"           },
-  { id:5,  title:"1984",                    titleAlt:["Nineteen Eighty-Four"],                    author:"George Orwell",               translator:"Celal Üster",   year:1949, country:"England",   countryFlag:"🇬🇧", status:"read",        readBy:["Alex","Jamie"],  readDate:"05.11.2020", genre:"Dystopia"          },
-  { id:6,  title:"Dune",                    titleAlt:["Dune Chronicles"],                         author:"Frank Herbert",               translator:"",              year:1965, country:"USA",       countryFlag:"🇺🇸", status:"unread",      readBy:[],               readDate:null,         genre:"Science Fiction"   },
-  { id:7,  title:"Sapiens",                 titleAlt:["Sapiens: A Brief History of Humankind"],   author:"Yuval Noah Harari",           translator:"Ertuğrul Genç", year:2011, country:"Israel",    countryFlag:"🇮🇱", status:"read",        readBy:["Alex","Jamie"],  readDate:"14.09.2023", genre:"History"           },
-  { id:8,  title:"Siddhartha",              titleAlt:["Siddharta"],                               author:"Hermann Hesse",               translator:"Gürsel Aytaç",  year:1922, country:"Germany",   countryFlag:"🇩🇪", status:"in-progress", readBy:["Alex"],         readDate:null,         genre:"Philosophy"        },
-  { id:9,  title:"Küçük Prens",             titleAlt:["Le Petit Prince","The Little Prince"],     author:"Antoine de Saint-Exupéry",    translator:"Aykut Derman",  year:1943, country:"France",    countryFlag:"🇫🇷", status:"read",        readBy:["Alex","Jamie"],  readDate:"03.04.2019", genre:"Classic"           },
-  { id:10, title:"Hayvanlar Çiftliği",      titleAlt:["Animal Farm"],                             author:"George Orwell",               translator:"Celal Üster",   year:1945, country:"England",   countryFlag:"🇬🇧", status:"unread",      readBy:[],               readDate:null,         genre:"Dystopia"          },
+  { id:1,  title:"Kıyamete Bir Milyar Yıl", titleAlt:["Definitely Maybe"],                        author:"Arkady and Boris Strugatsky", translator:"Ahmet Suat",    year:1974, country:"Russia",    countryFlag:"🇷🇺", status:"read",        readBy:["Melike"],          readDate:"03.02.2023", genre:"Science Fiction"   },
+  { id:2,  title:"Körlük",                  titleAlt:["Blindness","Ensaio sobre a Cegueira"],      author:"José Saramago",              translator:"Işık Ergüden",  year:1995, country:"Portugal",  countryFlag:"🇵🇹", status:"read",        readBy:["Melike","Aykut"],  readDate:"15.06.2022", genre:"Dystopia"          },
+  { id:3,  title:"Yüzyıllık Yalnızlık",     titleAlt:["One Hundred Years of Solitude"],           author:"Gabriel García Márquez",      translator:"Çiğdem Öztekin",year:1967, country:"Colombia",  countryFlag:"🇨🇴", status:"read",        readBy:["Melike","Aykut"],  readDate:"12.03.2021", genre:"Magical Realism"   },
+  { id:4,  title:"Suç ve Ceza",             titleAlt:["Crime and Punishment"],                    author:"Fyodor Dostoevsky",           translator:"Mazlum Beyhan", year:1866, country:"Russia",    countryFlag:"🇷🇺", status:"read",        readBy:["Aykut"],           readDate:"20.01.2022", genre:"Fiction"           },
+  { id:5,  title:"1984",                    titleAlt:["Nineteen Eighty-Four"],                    author:"George Orwell",               translator:"Celal Üster",   year:1949, country:"England",   countryFlag:"🇬🇧", status:"read",        readBy:["Melike","Aykut"],  readDate:"05.11.2020", genre:"Dystopia"          },
+  { id:6,  title:"Dune",                    titleAlt:["Dune Chronicles"],                         author:"Frank Herbert",               translator:"",              year:1965, country:"USA",       countryFlag:"🇺🇸", status:"unread",      readBy:[],                  readDate:null,         genre:"Science Fiction"   },
+  { id:7,  title:"Sapiens",                 titleAlt:["Sapiens: A Brief History of Humankind"],   author:"Yuval Noah Harari",           translator:"Ertuğrul Genç", year:2011, country:"Israel",    countryFlag:"🇮🇱", status:"read",        readBy:["Melike","Aykut"],  readDate:"14.09.2023", genre:"History"           },
+  { id:8,  title:"Siddhartha",              titleAlt:["Siddharta"],                               author:"Hermann Hesse",               translator:"Gürsel Aytaç",  year:1922, country:"Germany",   countryFlag:"🇩🇪", status:"in-progress", readBy:["Melike"],          readDate:null,         genre:"Philosophy"        },
+  { id:9,  title:"Küçük Prens",             titleAlt:["Le Petit Prince","The Little Prince"],     author:"Antoine de Saint-Exupéry",    translator:"Aykut Derman",  year:1943, country:"France",    countryFlag:"🇫🇷", status:"read",        readBy:["Melike","Aykut"],  readDate:"03.04.2019", genre:"Classic"           },
+  { id:10, title:"Hayvanlar Çiftliği",      titleAlt:["Animal Farm"],                             author:"George Orwell",               translator:"Celal Üster",   year:1945, country:"England",   countryFlag:"🇬🇧", status:"unread",      readBy:[],                  readDate:null,         genre:"Dystopia"          },
 ];
 
 // ═══════════════════════════════════════════════════════════════════
