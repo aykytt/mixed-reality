@@ -37,7 +37,6 @@
     #overlay {
       position: fixed; inset: 0;
       width: 100%; height: 100%;
-      pointer-events: none;
       z-index: 2;
     }
 
@@ -414,7 +413,7 @@
 const CFG = {
   OCR_WIDTH    : 640,       // Downscale video to this width for OCR
   OCR_INTERVAL : 500,       // ms between OCR passes
-  CACHE_MS     : 2000,      // How long a detected book stays visible after last seen
+  CACHE_MS     : 6000,      // How long a detected book stays visible after last seen
   DWELL_MS     : 1200,      // ms to hold cursor for dwell trigger
   MATCH_THRESH : 0.28,      // Fuse score threshold (lower = stricter)
   NGRAM_MAX    : 5,         // Max words per search phrase
@@ -704,7 +703,7 @@ async function processFrame() {
     S.detected = S.detected.filter(d => now - d.lastSeen < CFG.CACHE_MS);
 
     if (S.detected.length === 0 && !S.cardBook) {
-      setStatus('📷 Point camera at your bookshelf…');
+      setStatus('📷 Kitap sırtına tut → aurasına tıkla');
     }
 
   } catch (e) {
@@ -914,7 +913,7 @@ function closeCard() {
   S.cardBook   = null;
   S.cardRegion = null;
   infoCard.classList.remove('visible');
-  setStatus(S.detected.length ? `✓ ${S.detected[0].book.title}` : '📷 Point camera at your bookshelf…');
+  setStatus(S.detected.length ? `✓ ${S.detected[0].book.title}` : '📷 Kitap sırtına tut → aurasına tıkla');
 }
 
 closeBtn.addEventListener('click', closeCard);
@@ -1078,8 +1077,35 @@ async function boot() {
     setLoad('Ready!', 100);
     setTimeout(() => {
       hideLoading();
-      setStatus('📷 Point camera at your bookshelf…');
+      setStatus('📷 Kitap sırtına tut → aurasına tıkla');
     }, 600);
+
+    // Mouse hover → title pill + pointer cursor
+    overlay.addEventListener('mousemove', e => {
+      if (S.cardBook) return;
+      const hit = S.detected.find(det => {
+        const r = det.region;
+        return e.clientX >= r.x - 18 && e.clientX <= r.x + r.w + 18 &&
+               e.clientY >= r.y - 18 && e.clientY <= r.y + r.h + 18;
+      });
+      overlay.style.cursor = hit ? 'pointer' : 'default';
+      if (hit) {
+        if (S.hovered !== hit) { S.hovered = hit; showTitlePill(hit); }
+      } else {
+        if (S.hovered) { S.hovered = null; hideTitlePill(); }
+      }
+    });
+
+    // Click / tap → info card
+    overlay.addEventListener('click', e => {
+      if (S.cardBook) return;
+      const hit = S.detected.find(det => {
+        const r = det.region;
+        return e.clientX >= r.x - 18 && e.clientX <= r.x + r.w + 18 &&
+               e.clientY >= r.y - 18 && e.clientY <= r.y + r.h + 18;
+      });
+      if (hit) openCard(hit.book, hit.region);
+    });
 
     // Start OCR loop
     setInterval(processFrame, CFG.OCR_INTERVAL);
