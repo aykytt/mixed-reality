@@ -59,10 +59,37 @@
       white-space: nowrap;
     }
 
+    /* ── Person filter toggle ────────────────────────────────── */
+    #filter-toggle {
+      position: fixed;
+      top: 20px; left: 16px;
+      z-index: 10;
+      display: flex;
+      border-radius: 999px;
+      background: rgba(0,0,0,0.5);
+      border: 1px solid rgba(255,255,255,0.13);
+      overflow: hidden;
+    }
+    .filter-btn {
+      padding: 5px 11px;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.03em;
+      color: rgba(255,255,255,0.38);
+      background: transparent;
+      border: none;
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+    .filter-btn.active {
+      background: rgba(255,255,255,0.16);
+      color: #fff;
+    }
+
     /* ── Legend pill — top left ──────────────────────────────── */
     #legend {
       position: fixed;
-      top: 20px; left: 16px;
+      top: 52px; left: 16px;
       z-index: 10;
       display: flex;
       flex-direction: column;
@@ -294,6 +321,13 @@
 <!-- Stats pill -->
 <div id="stats-pill">📚 Loading…</div>
 
+<!-- Person filter toggle -->
+<div id="filter-toggle">
+  <button class="filter-btn active" data-filter="melike">Melike</button>
+  <button class="filter-btn"        data-filter="both">İkisi</button>
+  <button class="filter-btn"        data-filter="aykut">Aykut</button>
+</div>
+
 <!-- Legend -->
 <div id="legend">
   <div class="legend-item"><div class="legend-dot" style="background:#86efac"></div> Read</div>
@@ -381,7 +415,7 @@ const CFG = {
   OCR_INTERVAL : 500,       // ms between OCR passes
   CACHE_MS     : 2000,      // How long a detected book stays visible after last seen
   DWELL_MS     : 1200,      // ms to hold cursor for dwell trigger
-  MATCH_THRESH : 0.45,      // Fuse score threshold (lower = stricter)
+  MATCH_THRESH : 0.28,      // Fuse score threshold (lower = stricter)
   NGRAM_MAX    : 5,         // Max words per search phrase
   AURA_R       : 14,        // Aura corner radius
   AURA_PAD     : 12,        // Extra padding around OCR bbox
@@ -430,7 +464,16 @@ const S = {
   ocrReady   : false,
   ocrBusy    : false,
   offCanvas  : document.createElement('canvas'),
+  // Person filter: 'melike' | 'both' | 'aykut'
+  filter     : 'melike',
 };
+
+// Returns the status to display for a book based on the active person filter
+function getDisplayStatus(book) {
+  if (S.filter === 'melike') return (book.readBy || []).includes('Melike') ? 'read' : 'unread';
+  if (S.filter === 'aykut')  return (book.readBy || []).includes('Aykut')  ? 'read' : 'unread';
+  return book.status || 'unread';
+}
 
 // ─── LOADING UI ─────────────────────────────────────────────────────
 function setLoad(step, pct) {
@@ -482,12 +525,17 @@ async function loadBooks() {
     ],
     threshold        : CFG.MATCH_THRESH,
     includeScore     : true,
-    minMatchCharLength: 4,
+    minMatchCharLength: 5,
     ignoreLocation   : true,
   });
 
-  const read = S.books.filter(b => b.status === 'read').length;
-  statsPill.textContent = `${S.books.length} books · ${read} read`;
+  updateStatsPill();
+}
+
+function updateStatsPill() {
+  const read = S.books.filter(b => getDisplayStatus(b) === 'read').length;
+  const label = S.filter === 'melike' ? 'Melike' : S.filter === 'aykut' ? 'Aykut' : 'İkisi';
+  statsPill.textContent = `📚 ${S.books.length} · ${label}: ${read} okundu`;
 }
 
 // ═══════════════════════════════════════════════════════════════════
@@ -584,7 +632,7 @@ function bboxToScreen(bbox, ocrW, ocrH, deg) {
 // Returns { book, score, region } or null.
 function findBestMatch(data, ocrW, ocrH, deg) {
   if (!S.fuse) return null;
-  const words = (data.words || []).filter(w => w.confidence > 40 && w.text.trim().length > 1);
+  const words = (data.words || []).filter(w => w.confidence > 55 && w.text.trim().length > 2);
   if (words.length === 0) return null;
 
   let best = null;
@@ -835,7 +883,7 @@ function openCard(book, region) {
   S.cardRegion = region;
   hideTitlePill();
 
-  const ss = STATUS_STYLE[book.status] || STATUS_STYLE.unread;
+  const ss = STATUS_STYLE[getDisplayStatus(book)] || STATUS_STYLE.unread;
 
   $('c-genre').textContent  = book.genre    || '—';
   $('c-title').textContent  = book.title;
@@ -903,7 +951,7 @@ function render() {
   const now = Date.now();
   for (const det of S.detected) {
     if (now - det.lastSeen > CFG.CACHE_MS) continue;
-    const ss   = STATUS_STYLE[det.book.status] || STATUS_STYLE.unread;
+    const ss   = STATUS_STYLE[getDisplayStatus(det.book)] || STATUS_STYLE.unread;
     const fade = 1 - Math.max(0, (now - det.lastSeen) / CFG.CACHE_MS) * 0.4;
     drawAura(det.region, ss, fade);
   }
@@ -1052,6 +1100,15 @@ async function boot() {
 }
 
 boot();
+
+// ─── FILTER TOGGLE ───────────────────────────────────────────────────
+document.getElementById('filter-toggle').addEventListener('click', e => {
+  const btn = e.target.closest('.filter-btn');
+  if (!btn) return;
+  S.filter = btn.dataset.filter;
+  document.querySelectorAll('.filter-btn').forEach(b => b.classList.toggle('active', b === btn));
+  updateStatsPill();
+});
 </script>
 </body>
 </html>
