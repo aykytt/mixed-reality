@@ -503,33 +503,32 @@ async function initOCR() {
     }
   };
 
-  // Try Turkish + English; fall back to English only
+  // Try Turkish + English first, fall back to English only.
+  // Do NOT pass explicit workerPath/corePath/langPath — let Tesseract.js v4
+  // auto-detect them from the CDN it was loaded from.
   let langs = 'tur+eng';
   try {
-    S.ocrWorker = await Tesseract.createWorker(langs, 1, {
-      workerPath: 'https://cdn.jsdelivr.net/npm/tesseract.js@4/dist/worker.min.js',
-      corePath  : 'https://cdn.jsdelivr.net/npm/tesseract.js-core@4/tesseract-core.wasm.js',
-      langPath  : 'https://tessdata.projectnaptha.com/4.0.0_best',
-      logger    : logFn,
-    });
+    S.ocrWorker = await Tesseract.createWorker(langs, 1, { logger: logFn });
   } catch (e) {
     console.warn('tur+eng failed, trying eng only:', e.message);
     try {
       langs = 'eng';
-      S.ocrWorker = await Tesseract.createWorker(langs, 1, {
-      workerPath: 'https://cdn.jsdelivr.net/npm/tesseract.js@4/dist/worker.min.js',
-      corePath  : 'https://cdn.jsdelivr.net/npm/tesseract.js-core@4/tesseract-core.wasm.js',
-      langPath  : 'https://tessdata.projectnaptha.com/4.0.0_best',
-      logger    : logFn,
-    });
+      S.ocrWorker = await Tesseract.createWorker(langs, 1, { logger: logFn });
     } catch (e2) {
       showError('Failed to start OCR engine.', e2.message);
       return false;
     }
   }
 
-  // PSM 6 = single uniform block of text (good for spine text)
-  await S.ocrWorker.setParameters({ tessedit_pageseg_mode: '6' });
+  // PSM 6 = single uniform text block (optimal for spine text).
+  // Wrapped in try/catch — if the WASM core initialised with issues this
+  // fails gracefully and we proceed without the hint (still functional).
+  try {
+    await S.ocrWorker.setParameters({ tessedit_pageseg_mode: '6' });
+  } catch (e) {
+    console.warn('setParameters failed (non-fatal):', e.message);
+  }
+
   S.ocrReady = true;
   return true;
 }
