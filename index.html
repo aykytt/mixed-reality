@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
-  <title>AR Kütüphane</title>
+  <title>AR Library</title>
 
   <!-- OCR -->
   <script src="https://cdn.jsdelivr.net/npm/tesseract.js@4/dist/tesseract.min.js"></script>
@@ -292,13 +292,13 @@
 </svg>
 
 <!-- Stats pill -->
-<div id="stats-pill">📚 Yükleniyor…</div>
+<div id="stats-pill">📚 Loading…</div>
 
 <!-- Legend -->
 <div id="legend">
-  <div class="legend-item"><div class="legend-dot" style="background:#86efac"></div> Okundu</div>
-  <div class="legend-item"><div class="legend-dot" style="background:#fbbf24"></div> Okunmadı</div>
-  <div class="legend-item"><div class="legend-dot" style="background:#60a5fa"></div> Okunuyor</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#86efac"></div> Read</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#fbbf24"></div> Unread</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#60a5fa"></div> Reading</div>
 </div>
 
 <!-- Title pill (Level 2) -->
@@ -315,50 +315,50 @@
     <div class="status-block">
       <div class="status-icon" id="c-icon">📚</div>
       <div>
-        <div class="status-lbl">Durum</div>
+        <div class="status-lbl">Status</div>
         <div class="status-val" id="c-status">—</div>
       </div>
     </div>
 
     <div class="meta-row">
-      <span class="meta-lbl">Yıl</span>
+      <span class="meta-lbl">Year</span>
       <span class="meta-val" id="c-year">—</span>
     </div>
     <div class="meta-row">
-      <span class="meta-lbl">Ülke</span>
+      <span class="meta-lbl">Country</span>
       <span class="meta-val" id="c-country">—</span>
     </div>
     <div class="meta-row">
-      <span class="meta-lbl">Çevirmen</span>
+      <span class="meta-lbl">Translator</span>
       <span class="meta-val" id="c-translator">—</span>
     </div>
     <div class="meta-row" id="c-readby-row" style="flex-direction:column;align-items:flex-start;gap:6px;">
-      <span class="meta-lbl">Okuyan</span>
+      <span class="meta-lbl">Read by</span>
       <div class="readers-row" id="c-readby"></div>
     </div>
 
-    <button class="close-btn" id="close-btn">KAPAT ✕</button>
+    <button class="close-btn" id="close-btn">CLOSE ✕</button>
   </div>
 </div>
 
 <!-- Status bar -->
-<div id="status-bar">📷 Başlatılıyor…</div>
+<div id="status-bar">📷 Starting…</div>
 
 <!-- Loading -->
 <div id="loading">
   <div class="ld-logo">📚</div>
-  <div class="ld-title">AR Kütüphane</div>
-  <div class="ld-step" id="ld-step">Hazırlanıyor…</div>
+  <div class="ld-title">AR Library</div>
+  <div class="ld-step" id="ld-step">Initializing…</div>
   <div class="ld-bar"><div class="ld-fill" id="ld-fill"></div></div>
 </div>
 
 <!-- Error -->
 <div id="error">
   <div class="err-box">
-    <h3>⚠️ Hata</h3>
-    <p id="err-msg">Bir hata oluştu.</p>
+    <h3>⚠️ Error</h3>
+    <p id="err-msg">An error occurred.</p>
     <p style="font-size:11.5px;color:rgba(255,255,255,0.35)">
-      Sayfayı yenileyin, kamera iznini kontrol edin ve HTTPS kullanıldığından emin olun.
+      Reload the page, check camera permissions, and make sure you are using HTTPS.
     </p>
     <div class="err-code" id="err-code" style="display:none"></div>
   </div>
@@ -366,7 +366,7 @@
 
 <script>
 /* ═══════════════════════════════════════════════════════════════════
- *  AR KÜTÜPHANESİ
+ *  AR LIBRARY
  *  OCR (Tesseract.js) + Fuzzy match (Fuse.js) + Hand tracking (MediaPipe)
  *
  *  UX Levels:
@@ -390,9 +390,9 @@ const CFG = {
 const CIRCUMFERENCE = 2 * Math.PI * 13.5; // ≈ 84.82
 
 const STATUS_STYLE = {
-  'read'        : { stroke:'rgba(134,239,172,0.88)', fill:'rgba(134,239,172,0.08)', glow:'#86efac', icon:'📅', label:'Okundu'   },
-  'unread'      : { stroke:'rgba(251,191,36,0.88)',  fill:'rgba(251,191,36,0.08)',  glow:'#fbbf24', icon:'📚', label:'Okunmadı' },
-  'in-progress' : { stroke:'rgba(96,165,250,0.88)',  fill:'rgba(96,165,250,0.08)',  glow:'#60a5fa', icon:'📖', label:'Okunuyor' },
+  'read'        : { stroke:'rgba(134,239,172,0.88)', fill:'rgba(134,239,172,0.08)', glow:'#86efac', icon:'📅', label:'Read'        },
+  'unread'      : { stroke:'rgba(251,191,36,0.88)',  fill:'rgba(251,191,36,0.08)',  glow:'#fbbf24', icon:'📚', label:'Unread'      },
+  'in-progress' : { stroke:'rgba(96,165,250,0.88)',  fill:'rgba(96,165,250,0.08)',  glow:'#60a5fa', icon:'📖', label:'In Progress' },
 };
 
 // ─── DOM REFS ────────────────────────────────────────────────────────
@@ -464,7 +464,7 @@ resize();
 //  DATA — books.json + Fuse.js
 // ═══════════════════════════════════════════════════════════════════
 async function loadBooks() {
-  setLoad('Kitap verisi yükleniyor…', 10);
+  setLoad('Loading library data…', 10);
   try {
     const r = await fetch('./books.json');
     if (!r.ok) throw new Error('HTTP ' + r.status);
@@ -487,33 +487,43 @@ async function loadBooks() {
   });
 
   const read = S.books.filter(b => b.status === 'read').length;
-  statsPill.textContent = `${S.books.length} kitap · ${read} okundu`;
+  statsPill.textContent = `${S.books.length} books · ${read} read`;
 }
 
 // ═══════════════════════════════════════════════════════════════════
 //  OCR — Tesseract.js v4
 // ═══════════════════════════════════════════════════════════════════
 async function initOCR() {
-  setLoad('OCR motoru yükleniyor… (ilk açılışta ~30sn)', 35);
+  setLoad('Loading OCR engine… (first launch ~30s)', 35);
 
   const logFn = m => {
     if (m.status && m.progress != null) {
       const p = 35 + Math.round(m.progress * 30);
-      setLoad(`OCR: ${m.status} ${Math.round(m.progress * 100)}%`, Math.min(p, 65));
+      setLoad(`OCR: ${m.status} ${Math.round(m.progress * 100)}%`, Math.min(p, 65)); // status text comes from Tesseract internals
     }
   };
 
   // Try Turkish + English; fall back to English only
   let langs = 'tur+eng';
   try {
-    S.ocrWorker = await Tesseract.createWorker(langs, 1, { logger: logFn });
+    S.ocrWorker = await Tesseract.createWorker(langs, 1, {
+      workerPath: 'https://cdn.jsdelivr.net/npm/tesseract.js@4/dist/worker.min.js',
+      corePath  : 'https://cdn.jsdelivr.net/npm/tesseract.js-core@4/tesseract-core.wasm.js',
+      langPath  : 'https://tessdata.projectnaptha.com/4.0.0_best',
+      logger    : logFn,
+    });
   } catch (e) {
     console.warn('tur+eng failed, trying eng only:', e.message);
     try {
       langs = 'eng';
-      S.ocrWorker = await Tesseract.createWorker(langs, 1, { logger: logFn });
+      S.ocrWorker = await Tesseract.createWorker(langs, 1, {
+      workerPath: 'https://cdn.jsdelivr.net/npm/tesseract.js@4/dist/worker.min.js',
+      corePath  : 'https://cdn.jsdelivr.net/npm/tesseract.js-core@4/tesseract-core.wasm.js',
+      langPath  : 'https://tessdata.projectnaptha.com/4.0.0_best',
+      logger    : logFn,
+    });
     } catch (e2) {
-      showError('OCR motoru başlatılamadı.', e2.message);
+      showError('Failed to start OCR engine.', e2.message);
       return false;
     }
   }
@@ -647,7 +657,7 @@ async function processFrame() {
     S.detected = S.detected.filter(d => now - d.lastSeen < CFG.CACHE_MS);
 
     if (S.detected.length === 0 && !S.cardBook) {
-      setStatus('📷 Kitaplığa kamerayı tutun…');
+      setStatus('📷 Point camera at your bookshelf…');
     }
 
   } finally {
@@ -659,7 +669,7 @@ async function processFrame() {
 //  CAMERA
 // ═══════════════════════════════════════════════════════════════════
 async function initCamera() {
-  setLoad('Kamera başlatılıyor…', 68);
+  setLoad('Starting camera…', 68);
   try {
     const stream = await navigator.mediaDevices.getUserMedia({
       video: {
@@ -676,7 +686,7 @@ async function initCamera() {
     await cam.play();
   } catch (e) {
     showError(
-      'Kamera erişimi başarısız. Kamera iznini verin ve HTTPS kullanıldığından emin olun.',
+      'Camera access failed. Grant camera permission and make sure you are using HTTPS.',
       e.name + ': ' + e.message
     );
     return false;
@@ -862,7 +872,7 @@ function closeCard() {
   S.cardBook   = null;
   S.cardRegion = null;
   infoCard.classList.remove('visible');
-  setStatus(S.detected.length ? `✓ ${S.detected[0].book.title}` : '📷 Kitaplığa kamerayı tutun…');
+  setStatus(S.detected.length ? `✓ ${S.detected[0].book.title}` : '📷 Point camera at your bookshelf…');
 }
 
 closeBtn.addEventListener('click', closeCard);
@@ -987,16 +997,16 @@ function setStatus(text, color) {
 //  SAMPLE BOOKS — fallback if books.json is not found
 // ═══════════════════════════════════════════════════════════════════
 const SAMPLE_BOOKS = [
-  { id:1,  title:"Kıyamete Bir Milyar Yıl", titleAlt:["Definitely Maybe"],                        author:"Arkadi ve Boris Strugatski", translator:"Ahmet Suat",    year:1974, country:"Rusya",     countryFlag:"🇷🇺", status:"read",        readBy:["Melik"],         readDate:"03.02.2023", genre:"Bilim Kurgu"       },
-  { id:2,  title:"Körlük",                  titleAlt:["Blindness","Ensaio sobre a Cegueira"],      author:"José Saramago",              translator:"Işık Ergüden", year:1995, country:"Portekiz",  countryFlag:"🇵🇹", status:"read",        readBy:["Melik","Ayşe"],  readDate:"15.06.2022", genre:"Distopya"          },
-  { id:3,  title:"Yüzyıllık Yalnızlık",     titleAlt:["One Hundred Years of Solitude"],           author:"Gabriel García Márquez",      translator:"Çiğdem Öztekin",year:1967, country:"Kolombiya", countryFlag:"🇨🇴", status:"read",        readBy:["Melik","Ayşe"],  readDate:"12.03.2021", genre:"Büyülü Gerçekçilik"},
-  { id:4,  title:"Suç ve Ceza",             titleAlt:["Crime and Punishment"],                    author:"Fyodor Dostoyevski",          translator:"Mazlum Beyhan",year:1866, country:"Rusya",     countryFlag:"🇷🇺", status:"read",        readBy:["Melik"],         readDate:"20.01.2022", genre:"Roman"             },
-  { id:5,  title:"1984",                    titleAlt:["Nineteen Eighty-Four"],                    author:"George Orwell",               translator:"Celal Üster",  year:1949, country:"İngiltere", countryFlag:"🇬🇧", status:"read",        readBy:["Melik","Ayşe"],  readDate:"05.11.2020", genre:"Distopya"          },
-  { id:6,  title:"Dune",                    titleAlt:["Dune Chronicles"],                         author:"Frank Herbert",               translator:"",             year:1965, country:"ABD",       countryFlag:"🇺🇸", status:"unread",      readBy:[],               readDate:null,         genre:"Bilim Kurgu"       },
-  { id:7,  title:"Sapiens",                 titleAlt:["Sapiens: A Brief History of Humankind"],   author:"Yuval Noah Harari",           translator:"Ertuğrul Genç",year:2011, country:"İsrail",    countryFlag:"🇮🇱", status:"read",        readBy:["Melik","Ayşe"],  readDate:"14.09.2023", genre:"Tarih"             },
-  { id:8,  title:"Siddhartha",              titleAlt:["Siddharta"],                               author:"Hermann Hesse",               translator:"Gürsel Aytaç", year:1922, country:"Almanya",   countryFlag:"🇩🇪", status:"in-progress", readBy:["Melik"],         readDate:null,         genre:"Felsefe"           },
-  { id:9,  title:"Küçük Prens",             titleAlt:["Le Petit Prince","The Little Prince"],     author:"Antoine de Saint-Exupéry",    translator:"Aykut Derman", year:1943, country:"Fransa",    countryFlag:"🇫🇷", status:"read",        readBy:["Melik","Ayşe"],  readDate:"03.04.2019", genre:"Klasik"            },
-  { id:10, title:"Hayvanlar Çiftliği",      titleAlt:["Animal Farm"],                             author:"George Orwell",               translator:"Celal Üster",  year:1945, country:"İngiltere", countryFlag:"🇬🇧", status:"unread",      readBy:[],               readDate:null,         genre:"Distopya"          },
+  { id:1,  title:"Kıyamete Bir Milyar Yıl", titleAlt:["Definitely Maybe"],                        author:"Arkady and Boris Strugatsky", translator:"Ahmet Suat",    year:1974, country:"Russia",    countryFlag:"🇷🇺", status:"read",        readBy:["Alex"],         readDate:"03.02.2023", genre:"Science Fiction"   },
+  { id:2,  title:"Körlük",                  titleAlt:["Blindness","Ensaio sobre a Cegueira"],      author:"José Saramago",              translator:"Işık Ergüden",  year:1995, country:"Portugal",  countryFlag:"🇵🇹", status:"read",        readBy:["Alex","Jamie"],  readDate:"15.06.2022", genre:"Dystopia"          },
+  { id:3,  title:"Yüzyıllık Yalnızlık",     titleAlt:["One Hundred Years of Solitude"],           author:"Gabriel García Márquez",      translator:"Çiğdem Öztekin",year:1967, country:"Colombia",  countryFlag:"🇨🇴", status:"read",        readBy:["Alex","Jamie"],  readDate:"12.03.2021", genre:"Magical Realism"   },
+  { id:4,  title:"Suç ve Ceza",             titleAlt:["Crime and Punishment"],                    author:"Fyodor Dostoevsky",           translator:"Mazlum Beyhan", year:1866, country:"Russia",    countryFlag:"🇷🇺", status:"read",        readBy:["Alex"],         readDate:"20.01.2022", genre:"Fiction"           },
+  { id:5,  title:"1984",                    titleAlt:["Nineteen Eighty-Four"],                    author:"George Orwell",               translator:"Celal Üster",   year:1949, country:"England",   countryFlag:"🇬🇧", status:"read",        readBy:["Alex","Jamie"],  readDate:"05.11.2020", genre:"Dystopia"          },
+  { id:6,  title:"Dune",                    titleAlt:["Dune Chronicles"],                         author:"Frank Herbert",               translator:"",              year:1965, country:"USA",       countryFlag:"🇺🇸", status:"unread",      readBy:[],               readDate:null,         genre:"Science Fiction"   },
+  { id:7,  title:"Sapiens",                 titleAlt:["Sapiens: A Brief History of Humankind"],   author:"Yuval Noah Harari",           translator:"Ertuğrul Genç", year:2011, country:"Israel",    countryFlag:"🇮🇱", status:"read",        readBy:["Alex","Jamie"],  readDate:"14.09.2023", genre:"History"           },
+  { id:8,  title:"Siddhartha",              titleAlt:["Siddharta"],                               author:"Hermann Hesse",               translator:"Gürsel Aytaç",  year:1922, country:"Germany",   countryFlag:"🇩🇪", status:"in-progress", readBy:["Alex"],         readDate:null,         genre:"Philosophy"        },
+  { id:9,  title:"Küçük Prens",             titleAlt:["Le Petit Prince","The Little Prince"],     author:"Antoine de Saint-Exupéry",    translator:"Aykut Derman",  year:1943, country:"France",    countryFlag:"🇫🇷", status:"read",        readBy:["Alex","Jamie"],  readDate:"03.04.2019", genre:"Classic"           },
+  { id:10, title:"Hayvanlar Çiftliği",      titleAlt:["Animal Farm"],                             author:"George Orwell",               translator:"Celal Üster",   year:1945, country:"England",   countryFlag:"🇬🇧", status:"unread",      readBy:[],               readDate:null,         genre:"Dystopia"          },
 ];
 
 // ═══════════════════════════════════════════════════════════════════
@@ -1004,6 +1014,14 @@ const SAMPLE_BOOKS = [
 // ═══════════════════════════════════════════════════════════════════
 async function boot() {
   try {
+    // CDN availability checks
+    if (typeof Tesseract === 'undefined') {
+      showError('Tesseract.js failed to load — check your internet connection and reload.'); return;
+    }
+    if (typeof Fuse === 'undefined') {
+      showError('Fuse.js failed to load — check your internet connection and reload.'); return;
+    }
+
     await loadBooks();                          // 10–30%
 
     const camOk = await initCamera();           // 68%
@@ -1012,13 +1030,13 @@ async function boot() {
     const ocrOk = await initOCR();             // 35–65%
     if (!ocrOk) return;
 
-    setLoad('El takibi başlatılıyor…', 88);
+    setLoad('Starting hand tracking…', 88);
     initHandTracking();
 
-    setLoad('Hazır!', 100);
+    setLoad('Ready!', 100);
     setTimeout(() => {
       hideLoading();
-      setStatus('📷 Kitaplığa kamerayı tutun…');
+      setStatus('📷 Point camera at your bookshelf…');
     }, 600);
 
     // Start OCR loop
@@ -1029,7 +1047,7 @@ async function boot() {
 
   } catch (e) {
     console.error('Boot error:', e);
-    showError('Uygulama başlatılamadı: ' + e.message, e.stack);
+    showError('Failed to start app: ' + (e?.message || String(e) || 'Unknown error'), String(e?.stack || e));
   }
 }
 
