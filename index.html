@@ -6,7 +6,7 @@
   <title>AR Library</title>
 
   <!-- OCR -->
-  <script src="https://cdn.jsdelivr.net/npm/tesseract.js@4/dist/tesseract.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
   <!-- Fuzzy search -->
   <script src="https://cdn.jsdelivr.net/npm/fuse.js@7/dist/fuse.min.js"></script>
   <!-- Hand tracking -->
@@ -504,8 +504,7 @@ async function initOCR() {
   };
 
   // Try Turkish + English first, fall back to English only.
-  // Do NOT pass explicit workerPath/corePath/langPath — let Tesseract.js v4
-  // auto-detect them from the CDN it was loaded from.
+  // No explicit workerPath/corePath — Tesseract.js v5 auto-detects from CDN.
   let langs = 'tur+eng';
   try {
     S.ocrWorker = await Tesseract.createWorker(langs, 1, { logger: logFn });
@@ -659,6 +658,8 @@ async function processFrame() {
       setStatus('📷 Point camera at your bookshelf…');
     }
 
+  } catch (e) {
+    console.warn('OCR frame error:', e.message);
   } finally {
     S.ocrBusy = false;
   }
