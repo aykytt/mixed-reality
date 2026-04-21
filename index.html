@@ -320,6 +320,23 @@
 <!-- Stats pill -->
 <div id="stats-pill">📚 Loading…</div>
 
+<!-- Scan mode controls -->
+<div id="scan-start" style="position:fixed;top:58px;right:16px;z-index:10;display:flex;">
+  <button id="btn-scan-start" onclick="startScanMode()"
+    style="padding:7px 14px;border-radius:999px;background:rgba(0,0,0,0.52);backdrop-filter:blur(20px);
+           border:1px solid rgba(255,255,255,0.2);color:rgba(255,255,255,0.85);font-size:12px;
+           font-weight:700;letter-spacing:0.04em;cursor:pointer;">📷 TARA</button>
+</div>
+<div id="scan-active" style="position:fixed;top:58px;right:16px;z-index:10;display:none;align-items:center;gap:8px;">
+  <span id="scan-counter" style="padding:7px 12px;border-radius:999px;background:rgba(0,0,0,0.6);
+        backdrop-filter:blur(20px);border:1px solid rgba(96,165,250,0.4);color:#93c5fd;
+        font-size:12px;font-weight:700;">✓ 0 kitap tarandı</span>
+  <button onclick="endScanMode()"
+    style="padding:7px 14px;border-radius:999px;background:rgba(134,239,172,0.18);
+           border:1px solid rgba(134,239,172,0.5);color:#86efac;font-size:12px;
+           font-weight:700;letter-spacing:0.04em;cursor:pointer;">✓ BİTTİ</button>
+</div>
+
 <!-- Person filter toggle -->
 <div id="filter-toggle">
   <button class="filter-btn active" data-filter="melike">Melike</button>
@@ -412,13 +429,13 @@
 // ─── CONFIG ─────────────────────────────────────────────────────────
 const CFG = {
   OCR_WIDTH    : 640,       // Downscale video to this width for OCR
-  OCR_INTERVAL : 500,       // ms between OCR passes
-  CACHE_MS     : 6000,      // How long a detected book stays visible after last seen
+  CACHE_MS     : 20000,     // How long a detected book stays visible after last seen
   DWELL_MS     : 1200,      // ms to hold cursor for dwell trigger
   MATCH_THRESH : 0.28,      // Fuse score threshold (lower = stricter)
   NGRAM_MAX    : 5,         // Max words per search phrase
   AURA_R       : 14,        // Aura corner radius
   AURA_PAD     : 12,        // Extra padding around OCR bbox
+  SCAN_MODE    : false,     // Toggle via UI button
 };
 
 const CIRCUMFERENCE = 2 * Math.PI * 13.5; // ≈ 84.82
@@ -464,6 +481,10 @@ const S = {
   ocrReady   : false,
   ocrBusy    : false,
   offCanvas  : document.createElement('canvas'),
+  // Shelf map — persisted to localStorage
+  shelfMap   : {},          // { "bookId_N": { normX, normY, normW, normH, title, bookId } }
+  scanMode   : false,
+  anchorOffset: null,       // { dx, dy, anchorBookId } — live offset from saved positions
   // Person filter: 'melike' | 'both' | 'aykut'
   filter     : 'melike',
 };
@@ -567,11 +588,11 @@ async function initOCR() {
     }
   }
 
-  // PSM 6 = single uniform text block (optimal for spine text).
+  // PSM 11 = sparse text — best for book spines (few words, odd angles).
   // Wrapped in try/catch — if the WASM core initialised with issues this
   // fails gracefully and we proceed without the hint (still functional).
   try {
-    await S.ocrWorker.setParameters({ tessedit_pageseg_mode: '6' });
+    await S.ocrWorker.setParameters({ tessedit_pageseg_mode: '11' });
   } catch (e) {
     console.warn('setParameters failed (non-fatal):', e.message);
   }
@@ -632,7 +653,7 @@ function bboxToScreen(bbox, ocrW, ocrH, deg) {
 // Returns { book, score, region } or null.
 function findBestMatch(data, ocrW, ocrH, deg) {
   if (!S.fuse) return null;
-  const words = (data.words || []).filter(w => w.confidence > 55 && w.text.trim().length > 2);
+  const words = (data.words || []).filter(w => w.confidence > 40 && w.text.trim().length > 2);
   if (words.length === 0) return null;
 
   let best = null;
@@ -663,9 +684,41 @@ function findBestMatch(data, ocrW, ocrH, deg) {
   return best;
 }
 
-// Main OCR processing pass — called every CFG.OCR_INTERVAL ms
+// ─── SHELF MAP (localStorage) ────────────────────────────────────────
+function saveShelfMap() {
+  try { localStorage.setItem('shelfMap_v1', JSON.stringify(S.shelfMap)); } catch(e) {}
+}
+function loadShelfMap() {
+  try {
+    const raw = localStorage.getItem('shelfMap_v1');
+    if (raw) S.shelfMap = JSON.parse(raw);
+  } catch(e) { S.shelfMap = {}; }
+}
+function updateScanCounter() {
+  const n = Object.keys(S.shelfMap).length;
+  const el = document.getElementById('scan-counter');
+  if (el) el.textContent = `✓ ${n} kitap tarandı`;
+}
+
+// ─── SCAN MODE TOGGLE ────────────────────────────────────────────────
+function startScanMode() {
+  S.scanMode = true;
+  document.getElementById('scan-start').style.display = 'none';
+  document.getElementById('scan-active').style.display = 'flex';
+  updateScanCounter();
+  setStatus('📷 Tarama modu — rafı yavaşça tara', '#60a5fa');
+}
+function endScanMode() {
+  S.scanMode = false;
+  document.getElementById('scan-start').style.display = 'flex';
+  document.getElementById('scan-active').style.display = 'none';
+  setStatus(`✓ ${Object.keys(S.shelfMap).length} kitap kaydedildi`, '#86efac');
+}
+
+// ─── MAIN OCR LOOP — adaptive setTimeout (no fixed interval) ─────────
 async function processFrame() {
-  if (S.ocrBusy || !S.ocrReady || !cam.videoWidth) return;
+  if (!S.ocrReady || !cam.videoWidth) { setTimeout(processFrame, 300); return; }
+  if (S.ocrBusy)                      { setTimeout(processFrame, 100); return; }
   S.ocrBusy = true;
 
   try {
@@ -676,18 +729,20 @@ async function processFrame() {
     S.offCanvas.height = ocrH;
     S.offCanvas.getContext('2d').drawImage(cam, 0, 0, CFG.OCR_WIDTH, ocrH);
 
-    const rotations = [0, 90, -90];
+    // 0° removed — spine text is always rotated on a portrait phone
+    const rotations = [90, -90];
     let overall = null;
 
     for (const deg of rotations) {
-      const canvas = deg === 0 ? S.offCanvas : rotateCanvas(S.offCanvas, deg);
+      const canvas = rotateCanvas(S.offCanvas, deg);
       const { data } = await S.ocrWorker.recognize(canvas);
       const match = findBestMatch(data, canvas.width, canvas.height, deg);
       if (match && (!overall || match.score < overall.score)) overall = match;
-      if (overall && overall.score < 0.08) break; // Near-perfect — skip remaining rotations
+      if (overall && overall.score < 0.08) break; // near-perfect — stop early
     }
 
     if (overall) {
+      // Update live detections
       const existing = S.detected.find(d => d.book.id === overall.book.id);
       if (existing) {
         existing.region   = overall.region;
@@ -696,6 +751,36 @@ async function processFrame() {
         S.detected.push({ book: overall.book, region: overall.region, lastSeen: Date.now() });
       }
       setStatus(`✓ ${overall.book.title}`, '#86efac');
+
+      const bid = 'bookId_' + overall.book.id;
+      const r   = overall.region;
+      const sw  = window.innerWidth, sh = window.innerHeight;
+
+      // Scan mode: persist position to shelfMap
+      if (S.scanMode) {
+        S.shelfMap[bid] = {
+          normX  : (r.x + r.w / 2) / sw,
+          normY  : (r.y + r.h / 2) / sh,
+          normW  : r.w / sw,
+          normH  : r.h / sh,
+          title  : overall.book.title,
+          bookId : overall.book.id,
+        };
+        saveShelfMap();
+        updateScanCounter();
+      }
+
+      // Anchor projection: compute live offset vs saved position
+      if (S.shelfMap[bid]) {
+        const saved     = S.shelfMap[bid];
+        const liveNormX = (r.x + r.w / 2) / sw;
+        const liveNormY = (r.y + r.h / 2) / sh;
+        S.anchorOffset = {
+          dx           : liveNormX - saved.normX,
+          dy           : liveNormY - saved.normY,
+          anchorBookId : overall.book.id,
+        };
+      }
     }
 
     // Expire stale entries
@@ -703,13 +788,14 @@ async function processFrame() {
     S.detected = S.detected.filter(d => now - d.lastSeen < CFG.CACHE_MS);
 
     if (S.detected.length === 0 && !S.cardBook) {
-      setStatus('📷 Kitap sırtına tut → aurasına tıkla');
+      setStatus(S.anchorOffset ? '📡 Son konumdan gösteriliyor…' : '📷 Kitap sırtına tut → aurasına tıkla');
     }
 
   } catch (e) {
     console.warn('OCR frame error:', e.message);
   } finally {
     S.ocrBusy = false;
+    setTimeout(processFrame, 200); // fire again immediately after completion
   }
 }
 
@@ -939,9 +1025,37 @@ function hideTitlePill() {
 // ═══════════════════════════════════════════════════════════════════
 function render() {
   ctx.clearRect(0, 0, overlay.width, overlay.height);
-
-  // Level 1 — Ambient auras
   const now = Date.now();
+  const sw = window.innerWidth, sh = window.innerHeight;
+
+  // ── Faz 3: projected shelfMap overlays (anchor-based) ──────────────
+  if (S.anchorOffset) {
+    const { dx, dy } = S.anchorOffset;
+    for (const [bid, entry] of Object.entries(S.shelfMap)) {
+      // Skip if already being drawn as a live detection below
+      const isLive = S.detected.some(d => 'bookId_' + d.book.id === bid && now - d.lastSeen <= CFG.CACHE_MS);
+      if (isLive) continue;
+
+      const book = S.books.find(b => 'bookId_' + b.id === bid);
+      if (!book) continue;
+
+      const projX = (entry.normX + dx) * sw;
+      const projY = (entry.normY + dy) * sh;
+      const projW = entry.normW * sw;
+      const projH = entry.normH * sh;
+
+      const region = {
+        x: projX - projW / 2,
+        y: projY - projH / 2,
+        w: projW,
+        h: projH,
+      };
+      const ss = STATUS_STYLE[getDisplayStatus(book)] || STATUS_STYLE.unread;
+      drawAura(region, ss, 0.4); // dim — inferred position
+    }
+  }
+
+  // ── Level 1: live OCR auras (full brightness) ───────────────────────
   for (const det of S.detected) {
     if (now - det.lastSeen > CFG.CACHE_MS) continue;
     const ss   = STATUS_STYLE[getDisplayStatus(det.book)] || STATUS_STYLE.unread;
@@ -1107,8 +1221,12 @@ async function boot() {
       if (hit) openCard(hit.book, hit.region);
     });
 
-    // Start OCR loop
-    setInterval(processFrame, CFG.OCR_INTERVAL);
+    // Load saved shelf map
+    loadShelfMap();
+    updateScanCounter();
+
+    // Start adaptive OCR loop (self-scheduling setTimeout, not setInterval)
+    processFrame();
 
     // Start render loop
     render();
